@@ -1,0 +1,127 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model users {
+  user_id    Int        @id @default(autoincrement())
+  full_name  String     @db.VarChar(100)
+  email      String     @unique @db.VarChar(100)
+  password   String     @db.VarChar(255)
+  created_at DateTime?  @default(now()) @db.Timestamp(6)
+  phone      String?    @db.VarChar(20)
+  role       Int?       @default(0)
+  bookings   bookings[]
+  hotels     hotels[]
+  reviews    reviews[]
+}
+
+model amenities {
+  amenity_id          Int                   @id @default(autoincrement())
+  amenity_name        String                @db.VarChar(100)
+  room_type_amenities room_type_amenities[]
+}
+
+model bookings {
+  booking_id  Int        @id @default(autoincrement())
+  user_id     Int
+  room_id     Int
+  guest_count Int
+  check_in    DateTime   @db.Date
+  check_out   DateTime   @db.Date
+  total_price Decimal    @db.Decimal(12, 2)
+  status      Int?       @default(0)
+  created_at  DateTime?  @default(now()) @db.Timestamp(6)
+  rooms       rooms      @relation(fields: [room_id], references: [room_id], onDelete: NoAction, onUpdate: NoAction)
+  users       users      @relation(fields: [user_id], references: [user_id], onDelete: NoAction, onUpdate: NoAction)
+  payments    payments[]
+}
+
+model hotel_images {
+  image_id  Int    @id @default(autoincrement())
+  hotel_id  Int
+  image_url String
+  hotels    hotels @relation(fields: [hotel_id], references: [hotel_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model hotels {
+  hotel_id       Int            @id @default(autoincrement())
+  owner_id       Int
+  hotel_name     String         @db.VarChar(255)
+  phone          String?        @db.VarChar(20)
+  address        String
+  city           String?        @db.VarChar(100)
+  description    String?
+  star_rating    Int?
+  status         Int?           @default(0)
+  created_at     DateTime?      @default(now()) @db.Timestamp(6)
+  payment_status Int?           @default(0)
+  hotel_images   hotel_images[]
+  users          users          @relation(fields: [owner_id], references: [user_id], onDelete: NoAction, onUpdate: NoAction)
+  reviews        reviews[]
+  rooms          rooms[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model reviews {
+  review_id  Int       @id @default(autoincrement())
+  user_id    Int
+  hotel_id   Int
+  rating     Int?
+  comment    String?
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+  hotels     hotels    @relation(fields: [hotel_id], references: [hotel_id], onDelete: NoAction, onUpdate: NoAction)
+  users      users     @relation(fields: [user_id], references: [user_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model room_images {
+  image_id  Int    @id @default(autoincrement())
+  room_id   Int
+  image_url String
+  rooms     rooms  @relation(fields: [room_id], references: [room_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model room_type_amenities {
+  room_type_id Int
+  amenity_id   Int
+  amenities    amenities  @relation(fields: [amenity_id], references: [amenity_id], onDelete: NoAction, onUpdate: NoAction)
+  room_types   room_types @relation(fields: [room_type_id], references: [room_type_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([room_type_id, amenity_id])
+}
+
+model room_types {
+  room_type_id        Int                   @id @default(autoincrement())
+  type_name           String                @db.VarChar(100)
+  description         String?
+  max_guest           Int
+  room_type_amenities room_type_amenities[]
+  rooms               rooms[]
+}
+
+model rooms {
+  room_id         Int           @id @default(autoincrement())
+  hotel_id        Int
+  room_type_id    Int
+  room_number     String?       @db.VarChar(20)
+  price_per_night Decimal       @db.Decimal(12, 2)
+  status          Int?          @default(0)
+  bookings        bookings[]
+  room_images     room_images[]
+  hotels          hotels        @relation(fields: [hotel_id], references: [hotel_id], onDelete: NoAction, onUpdate: NoAction)
+  room_types      room_types    @relation(fields: [room_type_id], references: [room_type_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model payments {
+  payment_id       Int       @id @default(autoincrement())
+  booking_id       Int?
+  amount           Decimal   @db.Decimal(12, 2)
+  payment_method   String?   @db.VarChar(50)
+  transaction_code String?   @db.VarChar(255)
+  status           Int?      @default(0)
+  paid_at          DateTime? @db.Timestamp(6)
+  bookings         bookings? @relation(fields: [booking_id], references: [booking_id], onDelete: NoAction, onUpdate: NoAction)
+}

@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+:root {
+  --background: #070c1e;
+  --foreground: #ededed;
+  --gold: #e5c158;
+  --gold-hover: #d4af37;
+  --card-bg: #0f1631;
+  --card-border: #1e293b;
+  --surface: #111836;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* ===== SKELETON LOADING ANIMATION ===== */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #111836 0%,
+    #1a2350 25%,
+    #111836 50%,
+    #1a2350 75%,
+    #111836 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: 12px;
+}
+
+/* ===== FADE IN UP FALLBACK ===== */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeInUp {
+  animation: fadeInUp 0.6s ease-out forwards;
+}
+
+/* ===== GLOW EFFECT FOR CARDS ===== */
+@keyframes glowPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(229, 193, 88, 0);
+  }
+  50% {
+    box-shadow: 0 0 20px 2px rgba(229, 193, 88, 0.08);
+  }
+}
+
+/* ===== CUSTOM SCROLLBAR (DARK THEME) ===== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #070c1e;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* ===== BASE BODY ===== */
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* ===== SMOOTH FOCUS RING ===== */
+input:focus,
+select:focus,
+textarea:focus {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* ===== TEXT SELECTION ===== */
+::selection {
+  background: rgba(229, 193, 88, 0.3);
+  color: #fff;
+}

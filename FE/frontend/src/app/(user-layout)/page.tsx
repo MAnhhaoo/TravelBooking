@@ -1,0 +1,493 @@
+"use client";
+
+import { useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { getHotelsAPI } from "../../services/api";
+import { setHotels, setLoading } from "../../redux/slices/hotelSlice";
+import { motion } from "framer-motion";
+import Link from "next/link";
+
+// ==================== SKELETON CHO HOTEL CARDS ====================
+function HotelCardSkeleton() {
+  return (
+    <div className="bg-[#0f1736] rounded-3xl overflow-hidden border border-slate-800/40">
+      <div className="h-52 skeleton" />
+      <div className="p-5 space-y-3">
+        <div className="skeleton h-5 w-3/4 rounded-lg" />
+        <div className="flex gap-2">
+          <div className="skeleton h-3 w-16 rounded" />
+          <div className="skeleton h-3 w-20 rounded" />
+        </div>
+        <div className="border-t border-slate-800 pt-3 flex justify-between items-end">
+          <div className="skeleton h-3 w-24 rounded" />
+          <div className="skeleton h-5 w-28 rounded" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==================== ANIMATION VARIANTS ====================
+const fadeInUp = {
+  hidden: { opacity: 0, y: 30 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.6, delay: i * 0.1, ease: [0.25, 0.46, 0.45, 0.94] },
+  }),
+};
+
+const staggerContainer = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.08, delayChildren: 0.2 },
+  },
+};
+
+const cardItem = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" as const } },
+};
+
+// ==================== HELPER ====================
+function calcAvgRating(reviews: any[]) {
+  if (!reviews || reviews.length === 0) return null;
+  const valid = reviews.filter((r: any) => r.rating !== null);
+  if (valid.length === 0) return null;
+  const sum = valid.reduce((acc: number, r: any) => acc + r.rating, 0);
+  return (sum / valid.length).toFixed(1);
+}
+
+const PLACEHOLDER_IMAGES = [
+  "https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=500&auto=format&fit=crop&q=60",
+  "https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=500&auto=format&fit=crop&q=60",
+  "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=500&auto=format&fit=crop&q=60",
+  "https://images.unsplash.com/photo-1596394516093-501ba68a0ba6?w=500&auto=format&fit=crop&q=60",
+];
+
+// ==================== POPULAR DESTINATIONS (Tĩnh) ====================
+const popularDestinations = [
+  { id: 1, name: "Hà Nội", count: "1.234 khách sạn", image: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=500&auto=format&fit=crop&q=60" },
+  { id: 2, name: "Đà Nẵng", count: "890 khách sạn", image: "https://images.unsplash.com/photo-1559592413-7ece35936575?w=500&auto=format&fit=crop&q=60" },
+  { id: 3, name: "Nha Trang", count: "643 khách sạn", image: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=500&auto=format&fit=crop&q=60" },
+  { id: 4, name: "Phú Quốc", count: "532 khách sạn", image: "https://images.unsplash.com/photo-1540206351-d6465b3ac5c1?w=500&auto=format&fit=crop&q=60" },
+];
+
+export default function HomePage() {
+  const dispatch = useDispatch();
+  const hotelList = useSelector((state: any) => state.hotels?.list || []);
+  const loading = useSelector((state: any) => state.hotels?.loading ?? true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      dispatch(setLoading(true));
+      try {
+        const data = await getHotelsAPI();
+        dispatch(setHotels(data));
+      } catch (error) {
+        console.error("Lỗi gọi API Hotels:", error);
+        dispatch(setLoading(false));
+      }
+    };
+    fetchData();
+  }, [dispatch]);
+
+  return (
+    <div className="bg-[#070c1e] min-h-screen font-sans pb-24 text-white selection:bg-[#e5c158] selection:text-black">
+
+      {/* ═══════════════ SECTION 1: HERO BANNER ═══════════════ */}
+      <section
+        className="relative h-[560px] w-full bg-cover bg-center flex items-center justify-center"
+        style={{ backgroundImage: `url('https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1600&auto=format&fit=crop&q=80')` }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-[#070c1e]/60 to-[#070c1e]" />
+
+        <div className="relative z-10 max-w-6xl w-full px-4 text-white mt-8">
+          <motion.h1
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="text-4xl md:text-5xl font-extrabold tracking-tight mb-3 font-serif"
+          >
+            Khám phá thế giới <br /> Đặt phòng dễ dàng
+          </motion.h1>
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.2 }}
+            className="text-lg text-slate-300 mb-8 max-w-lg"
+          >
+            Hàng ngàn khách sạn ưu đãi tốt nhất dành cho bạn
+          </motion.p>
+
+          {/* FORM TÌM KIẾM */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+            className="bg-[#0f1631]/90 backdrop-blur-md rounded-3xl p-6 shadow-[0_8px_40px_rgba(0,0,0,0.3)] text-white flex flex-col md:flex-row items-center gap-4 border border-slate-700/40"
+          >
+            <div className="flex-1 w-full md:border-r border-slate-700/50 pr-3">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 tracking-widest">Điểm đến</label>
+              <input
+                type="text"
+                placeholder="Bạn muốn đến đâu?"
+                className="w-full bg-transparent text-sm outline-none font-medium text-white placeholder-slate-500 transition-colors duration-300 focus:placeholder-slate-400"
+              />
+            </div>
+            <div className="w-full md:w-44 md:border-r border-slate-700/50 pr-3">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 tracking-widest">Nhận phòng</label>
+              <input
+                type="text"
+                placeholder="ngày / tháng / năm"
+                className="w-full bg-transparent text-sm outline-none font-medium text-white placeholder-slate-500"
+              />
+            </div>
+            <div className="w-full md:w-44 md:border-r border-slate-700/50 pr-3">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 tracking-widest">Trả phòng</label>
+              <input
+                type="text"
+                placeholder="ngày / tháng / năm"
+                className="w-full bg-transparent text-sm outline-none font-medium text-white placeholder-slate-500"
+              />
+            </div>
+            <div className="w-full md:w-56 md:border-r border-slate-700/50 pr-3">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 tracking-widest">Khách &amp; Phòng</label>
+              <select className="w-full text-sm outline-none font-medium text-white bg-transparent cursor-pointer [color-scheme:dark]">
+                <option className="bg-[#0f1631]">2 khách, 1 phòng</option>
+                <option className="bg-[#0f1631]">1 khách, 1 phòng</option>
+                <option className="bg-[#0f1631]">4 khách, 2 phòng</option>
+              </select>
+            </div>
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              className="w-full md:w-auto bg-gradient-to-r from-[#e5c158] to-[#d4af37] text-black font-bold px-8 py-4 rounded-2xl 
+                         transition-all duration-300 
+                         shadow-[0_4px_20px_rgba(229,193,88,0.2)]
+                         hover:shadow-[0_8px_32px_rgba(229,193,88,0.35)] whitespace-nowrap"
+            >
+              Tìm kiếm
+            </motion.button>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ═══════════════ SECTION 2: ĐIỂM ĐẾN PHỔ BIẾN ═══════════════ */}
+      <section className="max-w-7xl mx-auto px-4 mt-24 text-center">
+        <motion.span
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          className="text-xs font-bold text-[#e5c158] tracking-[0.2em] uppercase block mb-3"
+        >
+          Địa điểm nổi bật
+        </motion.span>
+        <motion.h2
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="text-3xl md:text-4xl text-white font-light tracking-wide mb-12 font-serif"
+        >
+          Những điểm đến <span className="italic text-[#e5c158] font-normal">được yêu thích</span>
+        </motion.h2>
+
+        <motion.div
+          className="grid grid-cols-2 lg:grid-cols-4 gap-6"
+          variants={staggerContainer}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true }}
+        >
+          {popularDestinations.map((dest, index) => (
+            <Link key={dest.id} href={`/hotels?city=${encodeURIComponent(dest.name)}`}>
+              <motion.div
+                variants={cardItem}
+                whileHover={{ y: -8, transition: { duration: 0.3 } }}
+                className="relative h-[320px] md:h-[460px] rounded-3xl overflow-hidden shadow-2xl group cursor-pointer border border-slate-800/30
+                           transition-all duration-500
+                           hover:border-[#e5c158]/20 hover:shadow-[0_16px_48px_rgba(229,193,88,0.08)] block h-full"
+              >
+                <img
+                  src={dest.image}
+                  alt={dest.name}
+                  className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#070c1e]/90 via-[#070c1e]/25 to-transparent" />
+                <div className="absolute bottom-6 left-6 text-left space-y-1.5">
+                  <h3 className="font-medium text-xl md:text-2xl text-white font-serif drop-shadow-lg">
+                    {dest.name}
+                  </h3>
+                  <p className="text-xs md:text-sm text-[#e5c158] font-medium tracking-wide">
+                    {dest.count}
+                  </p>
+                </div>
+              </motion.div>
+            </Link>
+          ))}
+        </motion.div>
+      </section>
+
+      {/* ═══════════════ SECTION 3: KHÁCH SẠN TỪ DATABASE ═══════════════ */}
+      <section className="max-w-7xl mx-auto px-4 mt-24">
+        <div className="flex justify-between items-end mb-8">
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+          >
+            <span className="text-xs font-bold text-[#e5c158] tracking-[0.2em] uppercase block mb-2">
+              Dành cho bạn
+            </span>
+            <h2 className="text-2xl md:text-3xl font-light font-serif text-white">
+              Khách sạn <span className="italic text-[#e5c158] font-normal">nổi bật</span>
+            </h2>
+            <p className="text-sm text-slate-400 mt-2">
+              Dữ liệu được đồng bộ trực tiếp từ hệ thống PostgreSQL
+            </p>
+          </motion.div>
+          <Link
+            href="/hotel"
+            className="text-sm font-semibold text-[#e5c158] hover:underline underline-offset-4 transition-all duration-300 hover:text-[#d4af37]"
+          >
+            Xem tất cả →
+          </Link>
+        </div>
+
+        {/* SKELETON LOADING */}
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <HotelCardSkeleton key={i} />
+            ))}
+          </div>
+        ) : hotelList.length === 0 ? (
+          /* EMPTY STATE */
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-[#0f1736] border border-dashed border-slate-800 rounded-3xl p-14 text-center"
+          >
+            <div className="text-5xl mb-4">🏨</div>
+            <p className="font-medium text-lg text-white">Chưa có khách sạn nào hoặc Server BE chưa bật!</p>
+            <p className="text-sm text-slate-500 mt-1">Vui lòng khởi chạy server Node.js và kiểm tra database PostgreSQL.</p>
+          </motion.div>
+        ) : (
+          /* HOTEL CARDS */
+          <motion.div
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+            variants={staggerContainer}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true }}
+          >
+            {hotelList.slice(0, 8).map((hotel: any, index: number) => {
+              const avgRating = calcAvgRating(hotel.reviews);
+              const ratingScore = avgRating || "—";
+              const reviewCount = hotel.reviews?.length || 0;
+              const imageUrl =
+                hotel.hotel_images && hotel.hotel_images.length > 0
+                  ? hotel.hotel_images[0].image_url
+                  : PLACEHOLDER_IMAGES[index % PLACEHOLDER_IMAGES.length];
+              const starCount = hotel.star_rating || 0;
+
+              return (
+                <motion.div
+                  key={hotel.hotel_id}
+                  variants={cardItem}
+                  whileHover={{ y: -6, transition: { duration: 0.25 } }}
+                  className="bg-[#0f1736] rounded-3xl overflow-hidden border border-slate-800/40 
+                             shadow-[0_4px_24px_rgba(0,0,0,0.2)]
+                             transition-all duration-500
+                             hover:border-[#e5c158]/20 
+                             hover:shadow-[0_12px_40px_rgba(229,193,88,0.08)]
+                             flex flex-col justify-between group cursor-pointer"
+                >
+                  {/* Ảnh */}
+                  <div className="relative h-52 w-full bg-slate-900 overflow-hidden">
+                    <img
+                      src={imageUrl}
+                      alt={hotel.hotel_name}
+                      className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-110"
+                    />
+                    {/* Gradient overlay on hover */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+                    {/* Star badge */}
+                    {starCount > 0 && (
+                      <span className="absolute top-3 left-3 bg-black/40 backdrop-blur-md text-[#e5c158] font-bold text-[10px] px-2.5 py-1 rounded-lg flex items-center gap-1">
+                        {"★".repeat(Math.min(starCount, 5))}
+                      </span>
+                    )}
+
+                    {/* Favorite button */}
+                    <button className="absolute top-3 right-3 w-8 h-8 bg-black/30 backdrop-blur-md rounded-full flex items-center justify-center 
+                                       text-white/70 transition-all duration-300
+                                       hover:text-red-400 hover:bg-black/50 hover:scale-110
+                                       active:scale-90">
+                      ♥
+                    </button>
+                  </div>
+
+                  {/* Content */}
+                  <div className="p-5 flex-1 flex flex-col justify-between">
+                    <div>
+                      <h4 className="font-bold text-white text-base line-clamp-1 mb-1.5 transition-colors duration-300 group-hover:text-[#e5c158]">
+                        {hotel.hotel_name || "Chưa đặt tên"}
+                      </h4>
+                      <div className="flex items-center gap-2 text-xs font-semibold text-slate-400 mb-1">
+                        <span className="text-[#e5c158]">⭐ {ratingScore}</span>
+                        <span className="text-slate-600">•</span>
+                        <span>{reviewCount > 0 ? `${reviewCount} đánh giá` : "Mới"}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 flex items-center gap-1 line-clamp-1">
+                        <span className="opacity-60">📍</span>
+                        {hotel.city || hotel.address || "Việt Nam"}
+                      </p>
+                    </div>
+
+                    <div className="border-t border-slate-800/50 pt-3 mt-4 flex items-end justify-between">
+                      <div>
+                        <p className="text-[#e5c158] font-extrabold text-lg">
+                          Liên hệ
+                        </p>
+                        <p className="text-[10px] text-slate-500">/ đêm</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Link href={`/hotels/${hotel.hotel_id}`}>
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            className="bg-slate-800 text-slate-200 hover:text-white text-[11px] font-bold px-3 py-2 rounded-xl border border-slate-700 transition"
+                          >
+                            Xem chi tiết
+                          </motion.button>
+                        </Link>
+                        <Link href={`/bookings/checkout?hotelId=${hotel.hotel_id}&price=2000000&hotelName=${encodeURIComponent(hotel.hotel_name || "Khách sạn")}`}>
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            className="bg-gradient-to-r from-[#e5c158] to-[#d4af37] text-black text-[11px] font-extrabold px-3 py-2 rounded-xl shadow-md transition"
+                          >
+                            Đặt phòng
+                          </motion.button>
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        )}
+      </section>
+
+      {/* ═══════════════ SECTION 4: CAM KẾT TRẢI NGHIỆM ═══════════════ */}
+      <section className="max-w-7xl mx-auto px-4 mt-24 text-center">
+        <motion.span
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          className="text-xs font-bold text-[#e5c158] tracking-[0.2em] uppercase block mb-3"
+        >
+          Tại sao chọn chúng tôi
+        </motion.span>
+        <motion.h2
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="text-3xl md:text-4xl text-white font-light tracking-wide mb-12 font-serif"
+        >
+          Cam kết <span className="italic text-[#e5c158] font-normal">trải nghiệm</span> hoàn hảo
+        </motion.h2>
+
+        <motion.div
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+          variants={staggerContainer}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true }}
+        >
+          {[
+            { icon: "🛡️", title: "Thanh toán an toàn", desc: "Bảo mật SSL 256-bit, hỗ trợ nhiều phương thức thanh toán uy tín" },
+            { icon: "🕒", title: "Hỗ trợ 24/7", desc: "Đội ngũ chăm sóc khách hàng luôn sẵn sàng hỗ trợ bạn bất cứ lúc nào" },
+            { icon: "👍", title: "Giá tốt nhất", desc: "Cam kết giá tốt nhất, hoàn tiền nếu tìm thấy giá thấp hơn" },
+            { icon: "🏅", title: "Khách sạn chọn lọc", desc: "Hơn 50.000 khách sạn được kiểm duyệt chất lượng trên khắp Việt Nam" },
+          ].map((item, idx) => (
+            <motion.div
+              key={idx}
+              variants={cardItem}
+              whileHover={{ y: -6, transition: { duration: 0.25 } }}
+              className="bg-[#0f1736] border border-slate-800/60 rounded-3xl p-8 flex flex-col items-center text-center 
+                         transition-all duration-500 group cursor-pointer
+                         hover:border-[#e5c158]/20 hover:shadow-[0_8px_32px_rgba(229,193,88,0.06)]"
+            >
+              <div className="w-14 h-14 rounded-2xl border border-slate-700/60 flex items-center justify-center mb-6 text-2xl
+                              transition-all duration-300
+                              group-hover:bg-[#e5c158]/10 group-hover:border-[#e5c158]/30 group-hover:shadow-[0_0_20px_rgba(229,193,88,0.1)]">
+                {item.icon}
+              </div>
+              <h3 className="font-bold text-lg text-white mb-3 transition-colors duration-300 group-hover:text-[#e5c158]">
+                {item.title}
+              </h3>
+              <p className="text-sm text-slate-400 leading-relaxed">
+                {item.desc}
+              </p>
+            </motion.div>
+          ))}
+        </motion.div>
+      </section>
+
+      {/* ═══════════════ SECTION 5: BANNER ƯU ĐÃI ═══════════════ */}
+      <section className="max-w-7xl mx-auto px-4 mt-24">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.7 }}
+          className="relative w-full rounded-3xl overflow-hidden min-h-[360px] flex items-center bg-[#0d1430] border border-slate-800/60
+                     hover:border-slate-700/60 transition-all duration-500"
+        >
+          <div
+            className="absolute inset-0 bg-cover bg-right md:bg-right opacity-35 mix-blend-luminosity"
+            style={{ backgroundImage: `url('https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=1000&auto=format&fit=crop&q=60')` }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#0d1430] via-[#0d1430]/90 to-transparent" />
+
+          <div className="relative z-10 p-8 md:p-16 max-w-2xl">
+            <motion.span
+              initial={{ opacity: 0, x: -10 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.2 }}
+              className="inline-block bg-yellow-500/10 border border-[#e5c158]/30 text-[#e5c158] text-xs font-bold px-4 py-1.5 rounded-full mb-6"
+            >
+              ✨ Ưu đãi giới hạn
+            </motion.span>
+            <h2 className="text-3xl md:text-4xl text-white font-light mb-4 font-serif leading-tight">
+              Giảm đến <span className="text-[#e5c158] font-bold">40%</span> cho đặt phòng sớm
+            </h2>
+            <p className="text-slate-400 text-sm md:text-base mb-8 leading-relaxed">
+              Đặt phòng trước 30 ngày để nhận ưu đãi tốt nhất tại hơn 500 khách sạn 5 sao trên toàn Việt Nam.
+            </p>
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              className="bg-gradient-to-r from-[#e5c158] to-[#d4af37] text-black font-bold px-8 py-4 rounded-2xl 
+                         transition-all duration-300 
+                         shadow-[0_4px_20px_rgba(229,193,88,0.2)]
+                         hover:shadow-[0_8px_32px_rgba(229,193,88,0.35)]"
+            >
+              Đặt ngay hôm nay
+            </motion.button>
+          </div>
+        </motion.div>
+      </section>
+
+    </div>
+  );
+}
