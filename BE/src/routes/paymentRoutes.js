@@ -22,4 +22,7 @@ router.get("/getPaymentByBooking/:id", authenticate, paymentController.getPaymen
  *     summary: create new payment
  */
 router.post("/createPayment", authenticate, paymentController.createPayment);
+
+router.get("/getAllPayment", authenticate, paymentController.getAllPayment);
+
 module.exports = router;

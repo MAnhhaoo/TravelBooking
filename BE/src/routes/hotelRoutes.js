@@ -49,7 +49,7 @@ router.get("/getHotelById/:id", hotelController.getHotelById);
  *     summary: Tạo mới khách sạn
  *     description: Tạo một khách sạn mới trong hệ thống
  */
-router.post("/createHotel", authenticate, checkRole(['hotel own', 'admin']), hotelController.createHotel);
+router.post("/createHotel", authenticate, checkRole(['vendor', 'hotel own', 'admin']), hotelController.createHotel);
 
 /**
  * @swagger
@@ -59,7 +59,7 @@ router.post("/createHotel", authenticate, checkRole(['hotel own', 'admin']), hot
  *       - Hotels
  *     summary: Xóa khách sạn theo ID
  */
-router.delete("/deleteHotel/:id", authenticate, checkRole(['hotel own', 'admin']), hotelController.deleteHotel);
+router.delete("/deleteHotel/:id", authenticate, checkRole(['vendor', 'hotel own', 'admin']), hotelController.deleteHotel);
 
 /**
  * @swagger
@@ -69,7 +69,7 @@ router.delete("/deleteHotel/:id", authenticate, checkRole(['hotel own', 'admin']
  *       - Hotels
  *     summary: Cập nhật thông tin khách sạn
  */
-router.put("/updateHotel/:id", authenticate, checkRole(['hotel own', 'admin']), hotelController.updateHotel);
+router.put("/updateHotel/:id", authenticate, checkRole(['vendor', 'hotel own', 'admin']), hotelController.updateHotel);
 
 /**
  * @swagger
@@ -79,5 +79,5 @@ router.put("/updateHotel/:id", authenticate, checkRole(['hotel own', 'admin']), 
  *       - Hotels
  *     summary: Cập nhật trạng thái khách sạn
  */
-router.patch("/:id/status", authenticate, checkRole(['hotel own', 'admin']), hotelController.updateStatusHotel);
+router.patch("/:id/status", authenticate, checkRole(['vendor', 'hotel own', 'admin']), hotelController.updateStatusHotel);
 module.exports = router;

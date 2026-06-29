@@ -3,14 +3,22 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const getAllUsers = async (req, res) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const totalItems = await prisma.users.count();
 
     const rawUsers = await prisma.users.findMany({
+      skip,
+      take: limit,
+      orderBy: { user_id: 'asc' },
       select: {
-        user_id : true,
-        full_name : true,
+        user_id: true,
+        full_name: true,
         email: true,
-        phone : true,
-        role : true,
+        phone: true,
+        role: true,
         created_at: true,
       },
     });
@@ -22,12 +30,23 @@ const getAllUsers = async (req, res) => {
       email: u.email,
       phone: u.phone,
       role: u.role,
+      status: "Hoạt động",
       createdAt: u.created_at,
     }));
 
-    res.status(200).json(users);
+    return res.status(200).json({
+      message: "Lấy danh sách người dùng thành công",
+      results: users.length,
+      data: users,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalItems / limit),
+        totalItems,
+        limit,
+      },
+    });
   } catch (error) {
-    res.status(500).json({ message: "Lỗi Server: " + error.message });
+    return res.status(500).json({ message: "Lỗi Server: " + error.message });
   }
 };
 const createUser = async (req, res) => {
@@ -43,12 +62,12 @@ const createUser = async (req, res) => {
       data: { full_name: fullName, email, phone, role: role || 0, password: hashedPassword },
     });
     res.status(201).json({
-        id: newUser.user_id,
-        fullName: newUser.full_name,
-        email: newUser.email,
-        phone: newUser.phone,
-        role: newUser.role,
-        createdAt: newUser.created_at,
+      id: newUser.user_id,
+      fullName: newUser.full_name,
+      email: newUser.email,
+      phone: newUser.phone,
+      role: newUser.role,
+      createdAt: newUser.created_at,
     });
   } catch (e) {
     res.status(500).json({ message: "Lỗi Server: " + e.message });
@@ -58,12 +77,13 @@ const createUser = async (req, res) => {
 // Hàm đăng ký cho người dùng thường (có password riêng)
 const register = async (req, res) => {
   try {
-    const { fullName, email, phone, password } = req.body;
+    // 1. Lấy thêm role từ req.body
+    const { fullName, email, phone, password, role } = req.body;
+
     if (!fullName || !email || !password) {
       return res.status(400).json({ message: "Vui lòng điền đầy đủ họ tên, email và mật khẩu." });
     }
 
-    // Kiểm tra email đã tồn tại chưa
     const existingUser = await prisma.users.findUnique({ where: { email } });
     if (existingUser) {
       return res.status(409).json({ message: "Email này đã được sử dụng. Vui lòng dùng email khác." });
@@ -76,7 +96,8 @@ const register = async (req, res) => {
         email,
         phone: phone || null,
         password: hashedPassword,
-        role: 0, // Mặc định là customer
+        // 2. Nếu có truyền role thì dùng role đó, nếu không có thì mặc định là 0
+        role: role !== undefined ? role : 0,
       },
     });
 
@@ -165,14 +186,14 @@ const deleteUserById = async (req, res) => {
 
     // 2. Chạy Prisma Transaction để thực hiện dọn dẹp dây chuyền (Cascade Delete) thủ công
     await prisma.$transaction(async (tx) => {
-      
+
       // ====================================================================
       // BƯỚC A: DỌN DẸP DỮ LIỆU DO CHÍNH USER NÀY TẠO RA KHI ĐI ĐẶT PHÒNG / ĐÁNH GIÁ ĐỒNG NGHIỆP
       // ====================================================================
-      
+
       // A1. Xóa tất cả đánh giá (reviews) do chính User này viết
-      await tx.reviews.deleteMany({ 
-        where: { user_id: userId } 
+      await tx.reviews.deleteMany({
+        where: { user_id: userId }
       });
 
       // A2. Xóa tất cả hóa đơn (payments) cho các lượt đặt phòng của chính User này
@@ -181,60 +202,60 @@ const deleteUserById = async (req, res) => {
       });
 
       // A3. Xóa tất cả các lượt đặt phòng (bookings) của chính User này
-      await tx.bookings.deleteMany({ 
-        where: { user_id: userId } 
+      await tx.bookings.deleteMany({
+        where: { user_id: userId }
       });
 
 
       // ====================================================================
       // BƯỚC B: DỌN DẸP DỮ LIỆU CỦA KHÁCH HÀNG VÃNG LAI DÍNH VÀO KHÁCH SẠN CỦA USER NÀY
       // ====================================================================
-      
+
       // B1. Tìm danh sách tất cả ID khách sạn do User này sở hữu (owner_id)
       const userHotels = await tx.hotels.findMany({
         where: { owner_id: userId },
         select: { hotel_id: true }
       });
-      
+
       const hotelIds = userHotels.map(h => h.hotel_id);
 
       // Nếu User này có làm chủ khách sạn, ta tiến hành bóc tách dọn dẹp sâu bên trong
       if (hotelIds.length > 0) {
-        
+
         // B2. Xóa sạch tất cả ảnh của các khách sạn này
-        await tx.hotel_images.deleteMany({ 
-          where: { hotel_id: { in: hotelIds } } 
+        await tx.hotel_images.deleteMany({
+          where: { hotel_id: { in: hotelIds } }
         });
-        
+
         // B3. Xóa sạch tất cả ảnh của các phòng nằm trong các khách sạn này
         // Phải đi nhờ qua bảng rooms
-        await tx.room_images.deleteMany({ 
-          where: { rooms: { hotel_id: { in: hotelIds } } } 
+        await tx.room_images.deleteMany({
+          where: { rooms: { hotel_id: { in: hotelIds } } }
         });
-        
+
         // B4. Xóa các khoản thanh toán (payments) của KHÁCH HÀNG KHÁC trả cho khách sạn này
         await tx.payments.deleteMany({
           where: { bookings: { rooms: { hotel_id: { in: hotelIds } } } }
         });
 
         // B5. Xóa các lượt đặt phòng (bookings) của KHÁCH HÀNG KHÁC tại khách sạn này
-        await tx.bookings.deleteMany({ 
-          where: { rooms: { hotel_id: { in: hotelIds } } } 
+        await tx.bookings.deleteMany({
+          where: { rooms: { hotel_id: { in: hotelIds } } }
         });
-        
+
         // B6. Xóa tất cả các phòng (rooms) thuộc các khách sạn này
-        await tx.rooms.deleteMany({ 
-          where: { hotel_id: { in: hotelIds } } 
+        await tx.rooms.deleteMany({
+          where: { hotel_id: { in: hotelIds } }
         });
-        
+
         // B7. Xóa sạch tất cả đánh giá (reviews) của BẤT KỲ AI viết cho các khách sạn này
         await tx.reviews.deleteMany({
           where: { hotel_id: { in: hotelIds } }
         });
-        
+
         // B8. Xóa chính các khách sạn do User này làm chủ
-        await tx.hotels.deleteMany({ 
-          where: { owner_id: userId } 
+        await tx.hotels.deleteMany({
+          where: { owner_id: userId }
         });
       }
 
@@ -247,14 +268,14 @@ const deleteUserById = async (req, res) => {
     });
 
     // Trả về kết quả thành công rực rỡ
-    return res.status(200).json({ 
-      message: "Xóa cứng Người dùng và toàn bộ dữ liệu liên quan thành công vĩnh viễn!" 
+    return res.status(200).json({
+      message: "Xóa cứng Người dùng và toàn bộ dữ liệu liên quan thành công vĩnh viễn!"
     });
 
   } catch (error) {
     // Luôn luôn dùng dấu chấm .json để tránh crash server bạn nhé
-    return res.status(500).json({ 
-      message: "Lỗi server khi thực hiện Hard Delete: " + error.message 
+    return res.status(500).json({
+      message: "Lỗi server khi thực hiện Hard Delete: " + error.message
     });
   }
 };
@@ -321,6 +342,70 @@ const login = async (req, res) => {
   }
 };
 
+
+const getUserBookings = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = Number(id);
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Kiểm tra bảo mật IDOR: Chỉ chính user đó hoặc admin (role 2) mới được xem lịch sử đặt phòng
+    if (req.user?.user_id !== userId && Number(req.user?.role) !== 2) {
+      return res.status(403).json({
+        message: "Bạn không có quyền truy cập lịch sử đặt phòng của tài khoản này"
+      });
+    }
+
+    const totalItems = await prisma.bookings.count({
+      where: { user_id: userId }
+    });
+
+    // Lấy danh sách đặt phòng (không cần kiểm tra user tồn tại vì đã xác thực qua token)
+    const bookings = await prisma.bookings.findMany({
+      where: { user_id: userId },
+      skip,
+      take: limit,
+      orderBy: { created_at: 'desc' },
+      include: {
+        rooms: {
+          include: {
+            hotels: {
+              select: {
+                hotel_id: true,
+                hotel_name: true,
+                address: true,
+                city: true
+              }
+            },
+            room_types: true,
+            room_images: true
+          }
+        },
+        payments: true
+      }
+    });
+
+    return res.status(200).json({
+      message: "Lấy lịch sử đặt phòng thành công",
+      results: bookings.length,
+      data: bookings,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalItems / limit),
+        totalItems,
+        limit,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Lỗi server khi lấy lịch sử đặt phòng: " + error.message
+    });
+  }
+};
+
 module.exports = {
   getAllUsers,
   createUser,
@@ -328,5 +413,6 @@ module.exports = {
   getUserById,
   updateUserById,
   deleteUserById,
-  login
+  login,
+  getUserBookings
 };

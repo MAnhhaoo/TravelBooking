@@ -4,7 +4,15 @@ const prisma = require("../configs/database");
 // 1. Hàm Lấy Tất Cả Khách Sạn (Kèm Ảnh)
 const getAllHotel = async (req, res) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const totalItems = await prisma.hotels.count();
+
     const AllHotel = await prisma.hotels.findMany({
+      skip,
+      take: limit,
       select: {
         hotel_id: true,
         owner_id: true,
@@ -35,7 +43,17 @@ const getAllHotel = async (req, res) => {
       },
     });
 
-    return res.status(200).json(AllHotel);
+    return res.status(200).json({
+      message: "Lấy danh sách khách sạn thành công",
+      results: AllHotel.length,
+      data: AllHotel,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalItems / limit),
+        totalItems,
+        limit,
+      },
+    });
   } catch (error) {
     return res.status(500).json({ message: "Lỗi server: " + error.message });
   }

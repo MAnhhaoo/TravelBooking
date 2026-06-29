@@ -4,10 +4,20 @@ const prisma = require('../configs/database');
 const getAllReviewByHotel = async (req , res) => {
     try {
        const {id} = req.params;
+       const page = parseInt(req.query.page) || 1;
+       const limit = parseInt(req.query.limit) || 10;
+       const skip = (page - 1) * limit;
+
+       const totalItems = await prisma.reviews.count({
+        where: { hotel_id: Number(id) }
+       });
+
        const getReview = await prisma.reviews.findMany({
         where : {
             hotel_id : Number(id)
         },
+        skip,
+        take: limit,
         select : {
             review_id: true,
             rating : true ,
@@ -27,7 +37,14 @@ const getAllReviewByHotel = async (req , res) => {
        }); 
        return res.status(200).json({
         message : "success" ,
-        data : getReview
+        results: getReview.length,
+        data : getReview,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(totalItems / limit),
+          totalItems,
+          limit,
+        },
        });
     } catch (error) {
         return res.status(500).json({

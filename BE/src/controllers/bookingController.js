@@ -55,32 +55,175 @@ const createBooking = async (req, res) => {
   }
 };
 
-const updateStatusBooking = async (req,res)=>{
+const updateStatusBooking = async (req, res) => {
   try {
-    const {id} = req.params 
-    const {status} = req.body
-    const validateStatus = [0,1,2,3]
-    if (status === undefined || !validateStatus.includes(Number(status))) {
-      return res.status(404).json({
-        message : "status error must 0 1 2 or 3"
-      })
+    const { id } = req.params;
+    const { status } = req.body;
+    const VALID_STATUSES = [0, 1, 2, 3];
+
+    if (status === undefined || !VALID_STATUSES.includes(Number(status))) {
+      return res.status(400).json({
+        message: "Trạng thái không hợp lệ. Giá trị cho phép: 0 (Chờ), 1 (Đã thanh toán), 2 (Hoàn thành), 3 (Đã hủy)"
+      });
     }
-    const updateStatus = await prisma.bookings.update({
-      where : {
-        booking_id : Number(id)
-      },
-      data :{
-        status : Number(status)
-      }
-    })
+
+    const existingBooking = await prisma.bookings.findUnique({
+      where: { booking_id: Number(id) }
+    });
+    if (!existingBooking) {
+      return res.status(404).json({ message: "Không tìm thấy lượt đặt phòng này" });
+    }
+
+    const updated = await prisma.bookings.update({
+      where: { booking_id: Number(id) },
+      data: { status: Number(status) }
+    });
+
     return res.status(200).json({
-      message : "update success",
-      data : updateStatus
-    })
+      message: "Cập nhật trạng thái đặt phòng thành công",
+      data: updated
+    });
   } catch (error) {
     return res.status(500).json({
-      message: "server error" + error.message
-    })
+      message: "Lỗi server: " + error.message
+    });
   }
 }
-module.exports = { createBooking , updateStatusBooking};
+
+
+const getDetailBooking = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const bookingId = Number(id);
+
+    const detailBooking = await prisma.bookings.findUnique({
+      where: {
+        booking_id: bookingId
+      },
+      include: {
+        users: {
+          select: {
+            user_id: true,
+            full_name: true,
+            email: true,
+            phone: true
+          }
+        },
+        rooms: {
+          include: {
+            hotels: {
+              select: {
+                hotel_id: true,
+                hotel_name: true,
+                address: true,
+                city: true,
+                phone: true,
+                owner_id: true
+              }
+            },
+            room_types: true,
+            room_images: true
+          }
+        },
+        payments: true
+      }
+    });
+
+    if (!detailBooking) {
+      return res.status(404).json({
+        message: "Không tìm thấy thông tin lượt đặt phòng này"
+      });
+    }
+
+    // Kiểm tra bảo mật IDOR: Người đặt phòng (customer) HOẶC chủ khách sạn (owner) HOẶC admin (role 2)
+    const isCustomer = req.user?.user_id === detailBooking.user_id;
+    const isHotelOwner = req.user?.user_id === detailBooking.rooms?.hotels?.owner_id;
+    const isAdmin = Number(req.user?.role) === 2;
+
+    if (!isCustomer && !isHotelOwner && !isAdmin) {
+      return res.status(403).json({
+        message: "Bạn không có quyền xem chi tiết hóa đơn đặt phòng này"
+      });
+    }
+
+    return res.status(200).json({
+      message: "Lấy chi tiết lượt đặt phòng thành công",
+      data: detailBooking
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Lỗi server: " + error.message
+    });
+  }
+};
+
+const getAllBooking = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    let whereCondition = {};
+    if (req.user && Number(req.user.role) === 1) {
+      whereCondition = {
+        rooms: {
+          hotels: {
+            owner_id: req.user.user_id
+          }
+        }
+      };
+    }
+
+    const totalItems = await prisma.bookings.count({ where: whereCondition });
+
+    const bookings = await prisma.bookings.findMany({
+      where: whereCondition,
+      skip,
+      take: limit,
+      orderBy: { created_at: 'desc' },
+      include: {
+        users: {
+          select: {
+            user_id: true,
+            full_name: true,
+            email: true,
+            phone: true
+          }
+        },
+        rooms: {
+          include: {
+            hotels: {
+              select: {
+                hotel_id: true,
+                hotel_name: true,
+                address: true,
+                city: true
+              }
+            },
+            room_types: true,
+            room_images: true
+          }
+        },
+        payments: true
+      }
+    });
+
+    return res.status(200).json({
+      message: "Lấy danh sách tất cả đặt phòng thành công",
+      results: bookings.length,
+      data: bookings,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalItems / limit),
+        totalItems,
+        limit,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Lỗi server: " + error.message
+    });
+  }
+};
+
+module.exports = { createBooking, updateStatusBooking, getDetailBooking, getAllBooking };

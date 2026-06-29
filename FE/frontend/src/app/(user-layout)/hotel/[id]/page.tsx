@@ -31,15 +31,15 @@ export default function HotelDetailPage() {
     const fetchAllData = async () => {
       setLoading(true);
       try {
-        const [hotelData, roomsData, reviewsData] = await Promise.all([
+        const [hotelData, roomsData, reviewsData]: any[] = await Promise.all([
           getHotelByIdAPI(id),
           getRoomsByHotelAPI(id),
           getReviewsByHotelAPI(id)
         ]);
         setHotel(hotelData);
         // getRoomsByHotelAPI trả về { data: [...] }, phải unwrap .data
-        setRooms(Array.isArray(roomsData) ? roomsData : (roomsData?.data || []));
-        setReviews(reviewsData?.data || reviewsData || []);
+        setRooms(Array.isArray(roomsData) ? roomsData : ((roomsData as any)?.data || []));
+        setReviews((reviewsData as any)?.data || reviewsData || []);
       } catch (error) {
         console.error("Lỗi fetch chi tiết khách sạn:", error);
       } finally {

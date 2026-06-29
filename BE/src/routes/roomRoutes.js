@@ -21,7 +21,7 @@ router.get("/getAllRoom", roomController.getAllRoom);
  *       - Rooms
  *     summary: Tạo phòng mới
  */
-router.post("/createRoom", authenticate, checkRole(['hotel own', 'admin']), roomController.createRoom);
+router.post("/createRoom", authenticate, checkRole(['vendor', 'hotel own', 'admin']), roomController.createRoom);
 
 /**
  * @swagger
@@ -41,7 +41,7 @@ router.get("/getRoomByHotel/:hotelId", roomController.getRoomByHotel);
  *       - Rooms
  *     summary: Cập nhật phòng
  */
-router.put("/updateRoom/:id", authenticate, checkRole(['hotel own', 'admin']), roomController.updateRoom);
+router.put("/updateRoom/:id", authenticate, checkRole(['vendor', 'hotel own', 'admin']), roomController.updateRoom);
 
 /**
  * @swagger
@@ -51,7 +51,7 @@ router.put("/updateRoom/:id", authenticate, checkRole(['hotel own', 'admin']), r
  *       - Rooms
  *     summary: Xóa phòng theo ID
  */
-router.delete("/deleteRoom/:id", authenticate, checkRole(['hotel own', 'admin']), roomController.deleteRoom);
+router.delete("/deleteRoom/:id", authenticate, checkRole(['vendor', 'hotel own', 'admin']), roomController.deleteRoom);
 
 /**
  * @swagger
@@ -61,5 +61,5 @@ router.delete("/deleteRoom/:id", authenticate, checkRole(['hotel own', 'admin'])
  *       - Rooms
  *     summary: Cập nhật trạng thái phòng
  */
-router.patch("/updateStatusRoom/:id", authenticate, checkRole(['hotel own', 'admin']), roomController.updateStatusRoom);
+router.patch("/updateStatusRoom/:id", authenticate, checkRole(['vendor', 'hotel own', 'admin']), roomController.updateStatusRoom);
 module.exports = router;

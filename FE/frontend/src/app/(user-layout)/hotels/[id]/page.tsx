@@ -2,6 +2,6 @@
 
 import HotelDetailPage from "../../hotel/[id]/page";
 
-export default function HotelsDetailRedirectPage({ params }: any) {
-  return <HotelDetailPage params={params} />;
+export default function HotelsDetailRedirectPage() {
+  return <HotelDetailPage />;
 }

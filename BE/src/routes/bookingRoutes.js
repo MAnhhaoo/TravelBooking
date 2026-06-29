@@ -59,5 +59,40 @@ router.post("/createBooking", authenticate, bookingController.createBooking);
  *       200:
  *         description: Cập nhật thông tin khách sạn thành công
  */
-router.put("/updateStatusBooking/:id", authenticate, checkRole(['hotel own', 'admin']), bookingController.updateStatusBooking);
+router.put("/updateStatusBooking/:id", authenticate, checkRole(['vendor', 'hotel own', 'admin']), bookingController.updateStatusBooking);
+
+/**
+ * @swagger
+ * /api/bookings/getDetailBooking/{id}:
+ *   get:
+ *     tags:
+ *       - Bookings
+ *     summary: Get detail bookings by booking ID
+ *     description: lấy chi tiết lượt đặt phòng theo booking ID
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: ID của lượt đặt phòng
+ *     responses:
+ *       200:
+ *         description: chi tiết về lượt đặt phòng
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               $ref: "#/components/schemas/Booking"
+ *       404:
+ *         description: Không tìm thấy thông tin chi tiết về lượt đặt phòng này
+ *       401:
+ *         description: Unauthorized – token không hợp lệ hoặc đã hết hạn
+ *       500:
+ *         description: Lỗi hệ thống
+ */
+router.get("/getDetailBooking/:id", authenticate, bookingController.getDetailBooking);
+
+router.get("/getAllBooking", authenticate, bookingController.getAllBooking);
+
 module.exports = router;

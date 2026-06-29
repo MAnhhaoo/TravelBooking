@@ -8,7 +8,9 @@ const hotelRoute = require("./routes/hotelRoutes");
 const roomRoute = require("./routes/roomRoutes");
 const paymentRoute = require("./routes/paymentRoutes");
 const reviewRoute = require("./routes/reviewRoutes");
-const bookingRoute = require("./routes/bookingRoutes")
+const bookingRoute = require("./routes/bookingRoutes");
+const statsController = require("./controllers/statsController");
+const { authenticate, checkRole } = require("./middlewares/authMiddleware");
 const app = express();
 
 // 1. Các Middleware cơ bản phải chạy trước
@@ -49,6 +51,10 @@ const swaggerDocs = swaggerJsdoc(swaggerOptions);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
 // 3. Các tuyến đường API chính thức của bạn (Đặt ở phía dưới Swagger)
+app.get('/api/owner/stats', authenticate, checkRole(['vendor', 'hotel own', 'admin']), statsController.getOwnerStats);
+app.get('/api/admin/stats', authenticate, checkRole('admin'), statsController.getAdminStats);
+app.get('/admin/users', authenticate, checkRole('admin'), userController.getAllUsers);
+app.get('/api/admin/users', authenticate, checkRole('admin'), userController.getAllUsers);
 app.use('/api/users', useruserRoute);
 
 app.use('/api/hotels', hotelRoute);

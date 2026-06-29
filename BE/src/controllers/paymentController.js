@@ -5,6 +5,10 @@ const getPaymentByBooking = async (req, res) => {
   try {
     const { id } = req.params;
 
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
     const bookingExists = await prisma.bookings.findUnique({
       where: { booking_id: Number(id) },
     });
@@ -15,11 +19,17 @@ const getPaymentByBooking = async (req, res) => {
       });
     }
 
+    const totalItems = await prisma.payments.count({
+      where: { booking_id: Number(id) }
+    });
+
     // 3. Tiến hành lấy danh sách thanh toán của Booking đó
     const getPayment = await prisma.payments.findMany({
       where: {
         booking_id: Number(id),
       },
+      skip,
+      take: limit,
       select: {
         payment_id: true,
         booking_id: true,
@@ -41,6 +51,12 @@ const getPaymentByBooking = async (req, res) => {
       message: "Lấy thông tin thanh toán của hóa đơn thành công",
       results: getPayment.length,
       data: getPayment,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalItems / limit),
+        totalItems,
+        limit,
+      },
     });
   } catch (error) {
     return res.status(500).json({
@@ -108,4 +124,55 @@ const createPayment = async (req, res) => {
   }
 };
 
-module.exports = { getPaymentByBooking, createPayment  };
+const getAllPayment = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const totalItems = await prisma.payments.count();
+
+    const getPayment = await prisma.payments.findMany({
+      skip,
+      take: limit,
+      select: {
+        payment_id: true,
+        booking_id: true,
+        amount: true,
+        payment_method: true,
+        transaction_code: true,
+        status: true,
+        paid_at: true,
+        bookings: {
+          select: {
+            total_price: true,
+            users: {
+              select: {
+                full_name: true,
+                email: true
+              }
+            }
+          },
+        },
+      },
+    });
+
+    return res.status(200).json({
+      message: "Lấy danh sách tất cả thanh toán thành công",
+      results: getPayment.length,
+      data: getPayment,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalItems / limit),
+        totalItems,
+        limit,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Lỗi server: " + error.message,
+    });
+  }
+};
+
+module.exports = { getPaymentByBooking, createPayment, getAllPayment };

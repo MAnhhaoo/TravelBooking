@@ -30,18 +30,33 @@ export const registerAPI = async (userData) => {
     return response.data;
 };
 
-export const getUsersAPI = async () => {
+// Helper để xử lý response phân trang từ BE mà không làm gãy các component FE đang dùng mảng
+const normalizePaginatedResponse = (resData, fallbackArray = []) => {
+    if (!resData) return fallbackArray;
+    const result = resData.data !== undefined ? resData.data : resData;
+    if (Array.isArray(result)) {
+        if (resData.pagination) {
+            result.pagination = resData.pagination;
+        }
+        return result;
+    }
+    return fallbackArray;
+};
+
+export const getUsersAPI = async (page = 1, limit = 10) => {
     try {
-        const response = await api.get("/api/users/getAllUsers");
-        return response.data;
+        const response = await api.get(`/api/admin/users?page=${page}&limit=${limit}`);
+        return normalizePaginatedResponse(response.data);
     } catch (error) {
-        console.error("Lỗi khi lấy danh sách người dùng:", error);
+        console.warn("Lỗi khi lấy danh sách người dùng (sử dụng dữ liệu mẫu):", error?.message || error);
         // Fallback mock users so admin page works without crashing
-        return [
-            { id: 1, fullName: "Quản trị viên Hệ thống", email: "admin@travelbooking.com", role: 2, phone: "0901234567", createdAt: new Date().toISOString() },
-            { id: 2, fullName: "Nguyễn Văn Chủ", email: "owner@travelbooking.com", role: 1, phone: "0912345678", createdAt: new Date().toISOString() },
-            { id: 3, fullName: "Khách Hàng VIP", email: "customer@travelbooking.com", role: 0, phone: "0923456789", createdAt: new Date().toISOString() }
+        const mock = [
+            { id: 1, fullName: "Quản trị viên Hệ thống", email: "admin@travelbooking.com", role: 2, status: "Hoạt động", phone: "0901234567", createdAt: new Date().toISOString() },
+            { id: 2, fullName: "Nguyễn Văn Chủ", email: "owner@travelbooking.com", role: 1, status: "Hoạt động", phone: "0912345678", createdAt: new Date().toISOString() },
+            { id: 3, fullName: "Khách Hàng VIP", email: "customer@travelbooking.com", role: 0, status: "Hoạt động", phone: "0923456789", createdAt: new Date().toISOString() }
         ];
+        mock.pagination = { currentPage: page, totalPages: 1, totalItems: mock.length, limit };
+        return mock;
     }
 };
 
@@ -56,12 +71,12 @@ export const createUserAPI = async (userData) => {
 };
 
 // ==================== HOTEL APIs ====================
-export const getHotelsAPI = async () => {
+export const getHotelsAPI = async (page = 1, limit = 10) => {
     try {
-        const response = await api.get("/api/hotels/getAllHotel");
-        return response.data;
+        const response = await api.get(`/api/hotels/getAllHotel?page=${page}&limit=${limit}`);
+        return normalizePaginatedResponse(response.data);
     } catch (error) {
-        console.error("Lỗi khi lấy danh sách khách sạn:", error);
+        console.warn("Lỗi khi lấy danh sách khách sạn:", error?.message || error);
         return []; // Trả về mảng rỗng để giao diện không bị lỗi map()
     }
 };
@@ -88,22 +103,22 @@ export const updateHotelStatusAPI = async (id, status) => {
 };
 
 // ==================== ROOM APIs ====================
-export const getAllRoomsAPI = async () => {
+export const getAllRoomsAPI = async (page = 1, limit = 10) => {
     try {
-        const response = await api.get(`/api/rooms/getAllRoom`);
-        return response.data;
+        const response = await api.get(`/api/rooms/getAllRoom?page=${page}&limit=${limit}`);
+        return normalizePaginatedResponse(response.data);
     } catch (error) {
-        console.error("Lỗi khi lấy danh sách phòng:", error);
+        console.warn("Lỗi khi lấy danh sách phòng:", error?.message || error);
         return [];
     }
 };
 
-export const getRoomsByHotelAPI = async (hotelId) => {
+export const getRoomsByHotelAPI = async (hotelId, page = 1, limit = 10) => {
     try {
-        const response = await api.get(`/api/rooms/getRoomByHotel/${hotelId}`);
-        return response.data;
+        const response = await api.get(`/api/rooms/getRoomByHotel/${hotelId}?page=${page}&limit=${limit}`);
+        return normalizePaginatedResponse(response.data);
     } catch (error) {
-        console.error(`Lỗi khi lấy danh sách phòng cho khách sạn ID ${hotelId}:`, error);
+        console.warn(`Lỗi khi lấy danh sách phòng cho khách sạn ID ${hotelId}:`, error?.message || error);
         return [];
     }
 };
@@ -118,13 +133,33 @@ export const updateRoomStatusAPI = async (id, status) => {
     }
 };
 
-// ==================== REVIEW APIs ====================
-export const getReviewsByHotelAPI = async (hotelId) => {
+export const createRoomAPI = async (roomData) => {
     try {
-        const response = await api.get(`/api/reviews/getAllReviewByHotel/${hotelId}`);
+        const response = await api.post("/api/rooms/createRoom", roomData);
         return response.data;
     } catch (error) {
-        console.error(`Lỗi khi lấy đánh giá cho khách sạn ID ${hotelId}:`, error);
+        console.error("Lỗi khi tạo phòng mới:", error);
+        throw error;
+    }
+};
+
+export const updateRoomAPI = async (id, roomData) => {
+    try {
+        const response = await api.put(`/api/rooms/updateRoom/${id}`, roomData);
+        return response.data;
+    } catch (error) {
+        console.error("Lỗi khi cập nhật phòng:", error);
+        throw error;
+    }
+};
+
+// ==================== REVIEW APIs ====================
+export const getReviewsByHotelAPI = async (hotelId, page = 1, limit = 10) => {
+    try {
+        const response = await api.get(`/api/reviews/getAllReviewByHotel/${hotelId}?page=${page}&limit=${limit}`);
+        return normalizePaginatedResponse(response.data);
+    } catch (error) {
+        console.warn(`Lỗi khi lấy đánh giá cho khách sạn ID ${hotelId}:`, error?.message || error);
         return [];
     }
 };
@@ -140,6 +175,46 @@ export const createBookingAPI = async (bookingData) => {
     }
 };
 
+export const getUserBookingsAPI = async (userId, page = 1, limit = 10) => {
+    try {
+        const response = await api.get(`/api/users/getUserBookings/${userId}?page=${page}&limit=${limit}`);
+        return normalizePaginatedResponse(response.data);
+    } catch (error) {
+        console.warn(`Lỗi khi lấy lịch sử đặt phòng user ${userId}:`, error?.message || error);
+        return [];
+    }
+};
+
+export const getAllBookingsAPI = async (page = 1, limit = 10) => {
+    try {
+        const response = await api.get(`/api/bookings/getAllBooking?page=${page}&limit=${limit}`);
+        return normalizePaginatedResponse(response.data);
+    } catch (error) {
+        console.warn("Lỗi khi lấy danh sách tất cả đặt phòng:", error?.message || error);
+        return [];
+    }
+};
+
+export const getDetailBookingAPI = async (bookingId) => {
+    try {
+        const response = await api.get(`/api/bookings/getDetailBooking/${bookingId}`);
+        return response.data;
+    } catch (error) {
+        console.error(`Lỗi khi lấy chi tiết booking ${bookingId}:`, error);
+        throw error;
+    }
+};
+
+export const updateStatusBookingAPI = async (id, status) => {
+    try {
+        const response = await api.put(`/api/bookings/updateStatusBooking/${id}`, { status });
+        return response.data;
+    } catch (error) {
+        console.error("Lỗi khi cập nhật trạng thái đặt phòng:", error);
+        throw error;
+    }
+};
+
 // ==================== PAYMENT APIs ====================
 export const createPaymentAPI = async (paymentData) => {
     try {
@@ -148,5 +223,46 @@ export const createPaymentAPI = async (paymentData) => {
     } catch (error) {
         console.error("Lỗi khi xử lý thanh toán:", error);
         throw error;
+    }
+};
+
+export const getPaymentByBookingAPI = async (bookingId, page = 1, limit = 10) => {
+    try {
+        const response = await api.get(`/api/payments/getPaymentByBooking/${bookingId}?page=${page}&limit=${limit}`);
+        return normalizePaginatedResponse(response.data);
+    } catch (error) {
+        console.warn(`Lỗi khi lấy thanh toán của booking ${bookingId}:`, error?.message || error);
+        return [];
+    }
+};
+
+export const getAllPaymentsAPI = async (page = 1, limit = 10) => {
+    try {
+        const response = await api.get(`/api/payments/getAllPayment?page=${page}&limit=${limit}`);
+        return normalizePaginatedResponse(response.data);
+    } catch (error) {
+        console.warn("Lỗi khi lấy danh sách tất cả thanh toán:", error?.message || error);
+        return [];
+    }
+};
+
+// ==================== STATS APIs ====================
+export const getOwnerStatsAPI = async () => {
+    try {
+        const response = await api.get("/api/owner/stats");
+        return response.data?.data || null;
+    } catch (error) {
+        console.warn("Lỗi lấy thống kê Owner stats API:", error?.message || error);
+        return null;
+    }
+};
+
+export const getAdminStatsAPI = async () => {
+    try {
+        const response = await api.get("/api/admin/stats");
+        return response.data?.data || null;
+    } catch (error) {
+        console.warn("Lỗi lấy thống kê Admin stats API:", error?.message || error);
+        return null;
     }
 };

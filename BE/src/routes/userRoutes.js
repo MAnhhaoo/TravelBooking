@@ -12,6 +12,7 @@ const { authenticate, checkRole } = require("../middlewares/authMiddleware");
  *     summary: Lấy danh sách tất cả người dùng
  */
 router.get("/getAllUsers", authenticate, checkRole('admin'), userController.getAllUsers);
+router.get("/admin/users", authenticate, checkRole('admin'), userController.getAllUsers);
 
 /**
  * @swagger
@@ -21,7 +22,7 @@ router.get("/getAllUsers", authenticate, checkRole('admin'), userController.getA
  *       - Users
  *     summary: Tạo người dùng mới
  */
-router.post("/createUser", userController.createUser);
+router.post("/createUser", authenticate, checkRole('admin'), userController.createUser);
 
 /**
  * @swagger
@@ -97,5 +98,66 @@ router.delete("/deleteUserById/:id", authenticate, checkRole('admin'), userContr
  */
 router.post("/register", userController.register);
 
+/**
+ * @swagger
+ * /api/users/login:
+ *   post:
+ *     tags:
+ *       - Users
+ *     summary: Đăng nhập tài khoản
+ *     description: Người dùng đăng nhập tài khoản với email và mật khẩu
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: [EMAIL_ADDRESS]
+ *               password:
+ *                 type: string
+ *                 example: "123456"
+ *     responses:
+ *       200:
+ *         description: Đăng nhập thành công
+ *       401:
+ *         description: Sai email hoặc mật khẩu
+ *       400:
+ *         description: Thiếu thông tin bắt buộc
+ *       500:
+ *         description: Lỗi server
+ */
 router.post("/login", userController.login);
-module.exports = router;
+
+
+/**
+ * @swagger
+ * /api/users/getUserBookings/{id}:
+ *   get:
+ *     tags:
+ *       - Users
+ *     summary: Lấy lịch sử đặt phòng của người dùng
+ *     description: Lấy lịch sử đặt phòng của người dùng
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: ID của người dùng
+ *     responses:
+ *       200:
+ *         description: Lấy danh sách đặt phòng thành công
+ *       404:
+ *         description: Không tìm thấy người dùng
+ *       500:
+ *         description: Lỗi server
+ */
+router.get("/getUserBookings/:id", authenticate, userController.getUserBookings);
+
+module.exports = router;
