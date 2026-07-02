@@ -19,6 +19,45 @@ router.get("/getAllHotel", hotelController.getAllHotel);
 
 /**
  * @swagger
+ * /api/hotels/search:
+ *   get:
+ *     tags:
+ *       - Hotels
+ *     summary: Tìm kiếm khách sạn nâng cao
+ *     description: Tìm kiếm khách sạn theo keyword, city, số sao, khoảng giá phòng
+ *     parameters:
+ *       - in: query
+ *         name: keyword
+ *         schema:
+ *           type: string
+ *         description: Từ khóa tìm kiếm (tên, địa chỉ)
+ *       - in: query
+ *         name: city
+ *         schema:
+ *           type: string
+ *         description: Thành phố
+ *       - in: query
+ *         name: stars
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: minPrice
+ *         schema:
+ *           type: number
+ *         description: Giá tối thiểu/đêm
+ *       - in: query
+ *         name: maxPrice
+ *         schema:
+ *           type: number
+ *         description: Giá tối đa/đêm
+ *     responses:
+ *       200:
+ *         description: Danh sách khách sạn khớp
+ */
+router.get("/search", hotelController.searchHotels);
+
+/**
+ * @swagger
  * /api/hotels/getHotelById/{id}:
  *   get:
  *     tags:

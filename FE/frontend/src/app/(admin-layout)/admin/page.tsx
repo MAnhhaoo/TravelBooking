@@ -1,16 +1,56 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getUsersAPI, getHotelsAPI, updateHotelStatusAPI, getAdminStatsAPI } from "../../../services/api";
+import { getUsersAPI, getHotelsAPI, updateHotelStatusAPI, getAdminStatsAPI, getAllBookingsAPI } from "../../../services/api";
 import { mapUserRole, formatDate } from "../../../utils/dataMappers";
 import { motion } from "framer-motion";
+
+// Pagination component for admin
+function Pagination({ currentPage, totalPages, onPageChange }: { currentPage: number; totalPages: number; onPageChange: (p: number) => void }) {
+  if (totalPages <= 1) return null;
+  const maxPages = Math.min(totalPages, 7);
+  const pages = Array.from({ length: maxPages }, (_, i) => i + 1);
+  return (
+    <div className="flex items-center gap-2 mt-6 justify-center">
+      <button onClick={() => onPageChange(currentPage - 1)} disabled={currentPage === 1}
+        className="px-3 py-1.5 rounded-lg bg-[#111c38] border border-blue-900/40 text-slate-300 text-xs font-semibold disabled:opacity-30 hover:bg-[#1e2f4d] transition">
+        ‹ Trước
+      </button>
+      {pages.map(p => (
+        <button key={p} onClick={() => onPageChange(p)}
+          className={`w-8 h-8 rounded-lg text-xs font-bold transition border ${
+            p === currentPage
+              ? "bg-yellow-500 text-black border-yellow-500 shadow"
+              : "bg-[#111c38] border-blue-900/40 text-slate-300 hover:bg-[#1e2f4d]"
+          }`}>{p}</button>
+      ))}
+      {totalPages > 7 && <span className="text-slate-500 text-xs">...</span>}
+      <button onClick={() => onPageChange(currentPage + 1)} disabled={currentPage === totalPages}
+        className="px-3 py-1.5 rounded-lg bg-[#111c38] border border-blue-900/40 text-slate-300 text-xs font-semibold disabled:opacity-30 hover:bg-[#1e2f4d] transition">
+        Sau ›
+      </button>
+    </div>
+  );
+}
 
 export default function AdminDashboardPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [hotels, setHotels] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
+
+  // Bookings pagination
+  const [bookingPage, setBookingPage] = useState(1);
+  const [bookingPagination, setBookingPagination] = useState<any>(null);
+
+  // Stats time filter
+  const [statsPeriod, setStatsPeriod] = useState("month");
+  const [statsStartDate, setStatsStartDate] = useState("");
+  const [statsEndDate, setStatsEndDate] = useState("");
+  const [statsLoading, setStatsLoading] = useState(false);
+
 
   // Settings profile form state
   const [profileForm, setProfileForm] = useState({
@@ -51,7 +91,7 @@ export default function AdminDashboardPage() {
         const [usersData, hotelsData, statsData] = await Promise.all([
           getUsersAPI(),
           getHotelsAPI(),
-          getAdminStatsAPI()
+          getAdminStatsAPI({ period: "month" })
         ]);
         setUsers(usersData || []);
         setHotels(hotelsData || []);
@@ -64,6 +104,37 @@ export default function AdminDashboardPage() {
     };
     fetchAdminData();
   }, []);
+
+  // Fetch bookings với phân trang
+  useEffect(() => {
+    const fetchBookings = async () => {
+      try {
+        const res: any = await getAllBookingsAPI(bookingPage, 10);
+        setBookings(res?.data || []);
+        if (res?.pagination) setBookingPagination(res.pagination);
+      } catch (err) {
+        console.error("Lỗi fetch bookings admin:", err);
+      }
+    };
+    fetchBookings();
+  }, [bookingPage]);
+
+  // Fetch stats với bộ lọc
+  const handleFetchStats = async () => {
+    setStatsLoading(true);
+    const params: any = statsPeriod === "custom"
+      ? { startDate: statsStartDate, endDate: statsEndDate }
+      : { period: statsPeriod };
+    try {
+      const res = await getAdminStatsAPI(params);
+      setStats(res);
+    } catch (err) {
+      console.error("Lỗi fetch admin stats:", err);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
 
   const handleUpdateHotelStatus = async (hotelId: string, status: number) => {
     try {
@@ -235,9 +306,35 @@ export default function AdminDashboardPage() {
       {/* ===================== TAB: OVERVIEW (MAIN DASHBOARD) ===================== */}
       {activeTab === "overview" && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Tổng quan hệ thống</h1>
-            <p className="text-xs text-slate-400 mt-1">Dữ liệu cập nhật đến 28/06/2026</p>
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Tổng quan hệ thống</h1>
+              <p className="text-xs text-slate-400 mt-1">Dữ liệu cập nhật real-time từ cơ sở dữ liệu</p>
+            </div>
+            {/* Bộ lọc thời gian */}
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="flex gap-1.5">
+                {[{id:"day",label:"Hôm nay"},{id:"week",label:"Tuần"},{id:"month",label:"Tháng"},{id:"year",label:"Năm"},{id:"custom",label:"Tùy chọn"}].map(opt => (
+                  <button key={opt.id} onClick={() => setStatsPeriod(opt.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border ${statsPeriod === opt.id ? "bg-yellow-500 text-black border-yellow-500" : "bg-[#111c38] border-blue-900/40 text-slate-300 hover:bg-[#1e2f4d]"}`}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {statsPeriod === "custom" && (
+                <>
+                  <input type="date" value={statsStartDate} onChange={e => setStatsStartDate(e.target.value)}
+                    className="bg-[#111c38] border border-blue-900/40 rounded-lg px-2 py-1.5 text-xs text-white [color-scheme:dark]" />
+                  <span className="text-slate-500 text-xs">→</span>
+                  <input type="date" value={statsEndDate} onChange={e => setStatsEndDate(e.target.value)}
+                    className="bg-[#111c38] border border-blue-900/40 rounded-lg px-2 py-1.5 text-xs text-white [color-scheme:dark]" />
+                </>
+              )}
+              <button onClick={handleFetchStats} disabled={statsLoading}
+                className="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-lg text-xs transition shadow disabled:opacity-60">
+                {statsLoading ? "..." : "Áp dụng"}
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -862,6 +959,94 @@ export default function AdminDashboardPage() {
                 <p className="text-xs text-slate-400 mt-0.5">Làm mới toàn bộ cache của khách sạn và hình ảnh</p>
               </div>
               <button onClick={() => alert("🗑 Đã dọn dẹp sạch cache hệ thống!")} className="bg-rose-600 hover:bg-rose-500 text-white font-bold px-4 py-2 rounded-xl text-xs">Xóa Cache</button>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* ===================== TAB: BOOKINGS (PHÂN TRANG, ORDER DESC) ===================== */}
+      {activeTab === "bookings" && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Quản lý Đặt phòng</h1>
+              <p className="text-xs text-slate-400 mt-1">
+                {bookingPagination ? `Tổng ${bookingPagination.totalItems} đơn đặt phòng` : "Đang tải..."}
+                {" · "} Sắp xếp theo mới nhất
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-[#111c38] border border-blue-900/40 rounded-2xl shadow-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-blue-900/40 text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-[#0d1833]">
+                    <th className="px-5 py-3.5">Mã đơn</th>
+                    <th className="px-5 py-3.5">Khách hàng</th>
+                    <th className="px-5 py-3.5">Khách sạn / Phòng</th>
+                    <th className="px-5 py-3.5">Check-in → Check-out</th>
+                    <th className="px-5 py-3.5">Tổng tiền</th>
+                    <th className="px-5 py-3.5 text-right">Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-blue-900/20 text-sm">
+                  {bookings.map((b: any) => {
+                    const statusMap: Record<number, { label: string; cls: string }> = {
+                      0: { label: "Chờ duyệt",    cls: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" },
+                      1: { label: "Đã xác nhận",  cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
+                      2: { label: "Đang lưu trú", cls: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
+                      3: { label: "Hoàn thành",   cls: "bg-slate-500/10 text-slate-400 border-slate-500/20" },
+                    };
+                    const st = statusMap[Number(b.status)] || { label: "Không rõ", cls: "bg-slate-700 text-slate-400 border-slate-600" };
+                    const customerName = b.users?.full_name || "Ẩn danh";
+                    const hotelName = b.rooms?.hotels?.hotel_name || b.rooms?.hotel?.hotel_name || "—";
+                    const roomNumber = b.rooms?.room_number || `#${b.room_id}`;
+                    const checkin = b.check_in ? new Date(b.check_in).toLocaleDateString("vi-VN") : "—";
+                    const checkout = b.check_out ? new Date(b.check_out).toLocaleDateString("vi-VN") : "—";
+                    const price = b.total_price
+                      ? new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(Number(b.total_price))
+                      : "—";
+                    return (
+                      <tr key={b.booking_id} className="hover:bg-blue-900/10 transition duration-150">
+                        <td className="px-5 py-4 font-mono text-xs text-slate-400">BK-{b.booking_id}</td>
+                        <td className="px-5 py-4">
+                          <div className="font-semibold text-white text-sm">{customerName}</div>
+                          <div className="text-[11px] text-slate-500">{b.users?.email || ""}</div>
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="font-semibold text-slate-200 text-sm">{hotelName}</div>
+                          <div className="text-[11px] text-slate-500">Phòng {roomNumber}</div>
+                        </td>
+                        <td className="px-5 py-4 text-slate-400 text-xs">
+                          {checkin} → {checkout}
+                        </td>
+                        <td className="px-5 py-4 font-bold text-yellow-400 text-sm">{price}</td>
+                        <td className="px-5 py-4 text-right">
+                          <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${st.cls}`}>{st.label}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {bookings.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="py-16 text-center text-slate-500">
+                        <div className="flex flex-col items-center gap-3">
+                          <span className="text-4xl">📋</span>
+                          <p>Chưa có đơn đặt phòng nào.</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-6 pb-6">
+              <Pagination
+                currentPage={bookingPagination?.currentPage || 1}
+                totalPages={bookingPagination?.totalPages || 1}
+                onPageChange={setBookingPage}
+              />
             </div>
           </div>
         </motion.div>

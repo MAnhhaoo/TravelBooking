@@ -274,10 +274,122 @@ const updateStatusHotel = async (req, res) => {
     })
   }
 }
+/**
+ * Hàm Tìm Kiếm Khách Sạn Nâng Cao
+ * GET /api/hotels/search?keyword=...&city=...&stars=...&minPrice=...&maxPrice=...&page=1&limit=10
+ *
+ * Mục đích: Cho phép người dùng lọc khách sạn theo nhiều tiêu chí:
+ *   - keyword: tìm theo tên hoặc địa chỉ (không phân biệt hoa thường)
+ *   - city: lọc theo thành phố
+ *   - stars: lọc theo số sao (ví dụ: 3, 4, 5)
+ *   - minPrice / maxPrice: lọc theo khoảng giá phòng rẻ nhất
+ *   - page / limit: phân trang kết quả
+ *
+ * Sử dụng Prisma `where` với điều kiện động (chỉ thêm filter nếu có giá trị)
+ * để tránh query thừa khi user không chọn filter nào.
+ */
+const searchHotels = async (req, res) => {
+  try {
+    // Đọc các tham số filter từ query string
+    const { keyword, city, stars, minPrice, maxPrice } = req.query;
+    const page  = parseInt(req.query.page)  || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip  = (page - 1) * limit;
+
+    // Xây dựng điều kiện where động — chỉ thêm vào nếu tham số được truyền
+    const where = {};
+
+    // Tìm theo keyword: match tên khách sạn HOẶC địa chỉ (case-insensitive với mode: 'insensitive')
+    if (keyword) {
+      where.OR = [
+        { hotel_name: { contains: keyword, mode: 'insensitive' } },
+        { address:    { contains: keyword, mode: 'insensitive' } },
+        { city:       { contains: keyword, mode: 'insensitive' } }
+      ];
+    }
+
+    // Lọc theo thành phố (khớp chính xác hoặc gần đúng)
+    if (city && city !== 'Tat ca') {
+      where.city = { contains: city, mode: 'insensitive' };
+    }
+
+    // Lọc theo số sao (chuyển về mảng nếu truyền nhiều giá trị: "3,4,5")
+    if (stars) {
+      const starList = String(stars).split(',').map(Number).filter(n => !isNaN(n));
+      if (starList.length > 0) {
+        where.star_rating = { in: starList };
+      }
+    }
+
+    // Lọc theo giá phòng: chỉ lấy khách sạn có ít nhất 1 phòng trong khoảng giá
+    if (minPrice || maxPrice) {
+      where.rooms = {
+        some: {
+          price_per_night: {
+            ...(minPrice ? { gte: Number(minPrice) } : {}),  // gte = >=
+            ...(maxPrice ? { lte: Number(maxPrice) } : {})   // lte = <=
+          }
+        }
+      };
+    }
+
+    // Đếm tổng kết quả trước để tính phân trang
+    const totalItems = await prisma.hotels.count({ where });
+
+    // Truy vấn danh sách khách sạn theo điều kiện đã xây dựng
+    const hotels = await prisma.hotels.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { star_rating: 'desc' }, // Mặc định sắp xếp theo số sao giảm dần
+      select: {
+        hotel_id: true,
+        hotel_name: true,
+        phone: true,
+        address: true,
+        city: true,
+        description: true,
+        star_rating: true,
+        status: true,
+        // Lấy ảnh đại diện đầu tiên
+        hotel_images: {
+          select: { image_id: true, image_url: true },
+          take: 1
+        },
+        // Lấy tất cả review để tính điểm trung bình phía client
+        reviews: {
+          select: { rating: true }
+        },
+        // Lấy giá phòng rẻ nhất để hiển thị "Từ X/đêm"
+        rooms: {
+          select: { room_id: true, price_per_night: true, status: true }
+        }
+      }
+    });
+
+    // Trả về kết quả kèm thông tin phân trang
+    return res.status(200).json({
+      message: "Tìm kiếm khách sạn thành công",
+      results: hotels.length,
+      data: hotels,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalItems / limit),
+        totalItems,
+        limit
+      }
+    });
+
+  } catch (error) {
+    return res.status(500).json({ message: "Lỗi server: " + error.message });
+  }
+};
+
 module.exports = {
   getAllHotel,
   getHotelById,
-  createHotel, // Nhớ export hàm mới ra ngoài
+  searchHotels,
+  createHotel,
   deleteHotel,
   updateHotel,
   updateStatusHotel

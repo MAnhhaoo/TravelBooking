@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { getRoomsByHotelAPI, getHotelByIdAPI } from "../../../../../../services/api";
+import { getRoomByIdAPI, getHotelByIdAPI } from "../../../../../../services/api";
 import { motion, AnimatePresence } from "framer-motion";
 
 // ── Hằng số fallback đặt ngoài component để tránh tạo lại mỗi render ──────────
@@ -64,20 +64,17 @@ export default function RoomDetailPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [roomsRes, hotelRes]: any[] = await Promise.all([
-          getRoomsByHotelAPI(hotelId),
-          getHotelByIdAPI(hotelId),
+        // Gọi 2 API song song: lấy chi tiết phòng và thông tin khách sạn
+        const [roomRes, hotelRes]: any[] = await Promise.all([
+          getRoomByIdAPI(roomId),       // API mới: GET /api/rooms/getRoomById/:roomId
+          getHotelByIdAPI(hotelId),     // API hiện tại: GET /api/hotels/getHotelById/:id
         ]);
 
+        // Xử lý dữ liệu khách sạn (BE trả về trực tiếp object)
         setHotel(hotelRes?.data || hotelRes || null);
 
-        const roomsList = Array.isArray((roomsRes as any)?.data)
-          ? (roomsRes as any).data
-          : Array.isArray(roomsRes)
-          ? roomsRes
-          : [];
-
-        const found = roomsList.find((r: any) => r.room_id === roomId);
+        // Xử lý dữ liệu phòng từ response mới (BE trả về { message, data: {...} })
+        const found = roomRes?.data || null;
         if (found) {
           // Gán fallback cho các trường thiếu để không làm hỏng UI
           if (!found.room_images?.length) found.room_images = FALLBACK_IMAGES.map(url => ({ image_url: url }));
@@ -160,17 +157,6 @@ export default function RoomDetailPage() {
 
   return (
     <div className="min-h-screen bg-[#070c1e] text-white pb-20 font-sans">
-
-      {/* TECH LEAD NOTE — nhắc nhở cần API getRoomById */}
-      <div className="bg-gradient-to-r from-amber-600/20 via-amber-500/30 to-amber-600/20 border-b border-amber-500/40 py-2.5 px-4 text-center text-xs text-amber-300">
-        <span className="font-bold uppercase tracking-wider bg-amber-500 text-black px-2 py-0.5 rounded mr-2">
-          TECH LEAD NOTE
-        </span>
-        Frontend đang kết hợp{" "}
-        <code className="text-white font-mono bg-black/40 px-1.5 py-0.5 rounded">getRoomByHotel</code> +
-        fallback data. Backend cần bổ sung:{" "}
-        <strong className="text-white font-mono">GET /api/rooms/getRoomById/:roomId</strong>
-      </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-8">
 

@@ -306,10 +306,112 @@ const updateStatusRoom = async (req, res) => {
   }
 };
 
+/**
+ * Hàm Lấy Chi Tiết 1 Phòng Theo ID
+ * GET /api/rooms/getRoomById/:id
+ *
+ * Mục đích: Trả về đầy đủ thông tin của 1 phòng cụ thể, bao gồm:
+ *   - Thông tin cơ bản (số phòng, giá, trạng thái)
+ *   - Loại phòng (tên, mô tả, sức chứa)
+ *   - Danh sách tiện nghi của loại phòng đó (room_type_amenities -> amenities)
+ *   - Danh sách ảnh phòng (room_images)
+ *   - Thông tin khách sạn chứa phòng này (hotel_name, address, city, phone)
+ *
+ * Kết hợp Prisma select lồng nhau (nested select) để giảm thiểu số lượng
+ * câu query và tránh N+1 problem.
+ */
+const getRoomById = async (req, res) => {
+  try {
+    // Lấy roomId từ URL params, ép kiểu sang số nguyên
+    const { id } = req.params;
+    const roomId = Number(id);
+
+    // Kiểm tra nếu id không phải số hợp lệ
+    if (isNaN(roomId)) {
+      return res.status(400).json({ message: "ID phòng không hợp lệ" });
+    }
+
+    // Truy vấn Prisma lấy phòng theo ID (findUnique = chính xác 1 bản ghi)
+    const room = await prisma.rooms.findUnique({
+      where: { room_id: roomId },
+      select: {
+        // Thông tin cơ bản của phòng
+        room_id: true,
+        hotel_id: true,
+        room_type_id: true,
+        room_number: true,
+        price_per_night: true,
+        status: true,
+
+        // Thông tin loại phòng kèm tiện nghi (join 3 bảng: room_types -> room_type_amenities -> amenities)
+        room_types: {
+          select: {
+            type_name: true,
+            description: true,
+            max_guest: true,
+            // Lấy danh sách tiện nghi qua bảng trung gian room_type_amenities
+            room_type_amenities: {
+              include: {
+                amenities: true  // Join vào bảng amenities để lấy tên tiện nghi
+              }
+            }
+          }
+        },
+
+        // Danh sách tất cả ảnh của phòng này
+        room_images: {
+          select: {
+            image_id: true,
+            image_url: true
+          }
+        },
+
+        // Thông tin khách sạn chứa phòng (để hiển thị breadcrumb và thông tin liên hệ)
+        hotels: {
+          select: {
+            hotel_id: true,
+            hotel_name: true,
+            address: true,
+            city: true,
+            phone: true,
+            star_rating: true,
+            description: true,
+            // Lấy 1 ảnh đại diện của khách sạn
+            hotel_images: {
+              select: { image_url: true },
+              take: 1  // Chỉ lấy 1 ảnh thumbnail đầu tiên để tránh over-fetching
+            }
+          }
+        }
+      }
+    });
+
+    // Nếu không tìm thấy phòng với ID này, trả về 404
+    if (!room) {
+      return res.status(404).json({
+        message: `Không tìm thấy phòng với ID: ${roomId}`
+      });
+    }
+
+    // Trả về dữ liệu phòng thành công
+    return res.status(200).json({
+      message: "Lấy thông tin chi tiết phòng thành công",
+      data: room
+    });
+
+  } catch (error) {
+    // Bắt lỗi bất ngờ từ server/database và trả về 500
+    return res.status(500).json({
+      message: "Lỗi server: " + error.message
+    });
+  }
+};
+
 module.exports = {
   getAllRoom,
   createRoom,
   getRoomByHotel,
+  getRoomById,
   updateRoom,
   deleteRoom,
   updateStatusRoom

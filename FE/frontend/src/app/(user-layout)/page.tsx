@@ -59,6 +59,23 @@ function calcAvgRating(reviews: any[]) {
   return (sum / valid.length).toFixed(1);
 }
 
+// Tính giá phòng rẻ nhất từ danh sách phòng của khách sạn
+function getMinPrice(rooms: any[]): number {
+  if (!rooms || rooms.length === 0) return 0;
+  const prices = rooms.map((r: any) => Number(r.price_per_night)).filter((p: number) => p > 0);
+  return prices.length > 0 ? Math.min(...prices) : 0;
+}
+
+// Lấy room_id của phòng rẻ nhất (dùng cho link đặt phòng)
+function getCheapestRoomId(rooms: any[]): number | null {
+  if (!rooms || rooms.length === 0) return null;
+  const available = rooms.filter((r: any) => Number(r.price_per_night) > 0);
+  if (available.length === 0) return null;
+  return available.reduce((min: any, r: any) => 
+    Number(r.price_per_night) < Number(min.price_per_night) ? r : min
+  ).room_id;
+}
+
 const PLACEHOLDER_IMAGES = [
   "https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=500&auto=format&fit=crop&q=60",
   "https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=500&auto=format&fit=crop&q=60",
@@ -293,6 +310,9 @@ export default function HomePage() {
                   ? hotel.hotel_images[0].image_url
                   : PLACEHOLDER_IMAGES[index % PLACEHOLDER_IMAGES.length];
               const starCount = hotel.star_rating || 0;
+              // Lấy giá phòng rẻ nhất thật từ DB
+              const minPrice = getMinPrice(hotel.rooms || []);
+              const cheapestRoomId = getCheapestRoomId(hotel.rooms || []);
 
               return (
                 <motion.div
@@ -349,28 +369,56 @@ export default function HomePage() {
                       </p>
                     </div>
 
-                    <div className="border-t border-slate-800/50 pt-3 mt-4 flex items-end justify-between">
-                      <div>
-                        <p className="text-[#e5c158] font-extrabold text-lg">
-                          Liên hệ
-                        </p>
-                        <p className="text-[10px] text-slate-500">/ đêm</p>
+                    {/* Giá + Nút hành động — Premium UI với spacing chuẩn */}
+                    <div className="mt-5 pt-4 border-t border-slate-800/60">
+                      {/* Dòng giá */}
+                      <div className="mb-3">
+                        {minPrice > 0 ? (
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-[#e5c158] font-extrabold text-xl leading-none">
+                              {new Intl.NumberFormat("vi-VN").format(minPrice)}đ
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-medium">/đêm</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-[#e5c158] font-extrabold text-xl leading-none">Liên hệ</span>
+                            <span className="text-[11px] text-slate-500 font-medium">để biết giá</span>
+                          </div>
+                        )}
                       </div>
-                      <div className="flex gap-2">
-                        <Link href={`/hotels/${hotel.hotel_id}`}>
+                      {/* Hai nút hành động */}
+                      <div className="flex items-center gap-2.5">
+                        <Link href={`/hotels/${hotel.hotel_id}`} className="flex-1">
                           <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            className="bg-slate-800 text-slate-200 hover:text-white text-[11px] font-bold px-3 py-2 rounded-xl border border-slate-700 transition"
+                            whileHover={{ scale: 1.03, backgroundColor: "rgba(148,163,184,0.12)" }}
+                            whileTap={{ scale: 0.96 }}
+                            className="w-full bg-slate-800/80 border border-slate-700/60 text-slate-300 hover:text-white
+                                       text-[11px] font-bold px-3 py-2.5 rounded-xl
+                                       transition-all duration-200
+                                       hover:border-slate-600 hover:shadow-[0_0_12px_rgba(148,163,184,0.08)]
+                                       active:scale-95"
                           >
                             Xem chi tiết
                           </motion.button>
                         </Link>
-                        <Link href={`/bookings/checkout?hotelId=${hotel.hotel_id}&price=2000000&hotelName=${encodeURIComponent(hotel.hotel_name || "Khách sạn")}`}>
+                        <Link
+                          href={cheapestRoomId
+                            ? `/hotels/${hotel.hotel_id}/rooms/${cheapestRoomId}`
+                            : `/hotels/${hotel.hotel_id}`}
+                          className="flex-1"
+                        >
                           <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            className="bg-gradient-to-r from-[#e5c158] to-[#d4af37] text-black text-[11px] font-extrabold px-3 py-2 rounded-xl shadow-md transition"
+                            whileHover={{
+                              scale: 1.03,
+                              boxShadow: "0 6px 24px rgba(229,193,88,0.35)"
+                            }}
+                            whileTap={{ scale: 0.96 }}
+                            className="w-full bg-gradient-to-r from-[#e5c158] to-[#d4af37]
+                                       text-black text-[11px] font-extrabold px-3 py-2.5 rounded-xl
+                                       shadow-[0_3px_12px_rgba(229,193,88,0.2)]
+                                       transition-all duration-200
+                                       active:scale-95"
                           >
                             Đặt phòng
                           </motion.button>

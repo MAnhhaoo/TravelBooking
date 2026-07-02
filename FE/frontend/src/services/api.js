@@ -81,6 +81,25 @@ export const getHotelsAPI = async (page = 1, limit = 10) => {
     }
 };
 
+// Tìm kiếm khách sạn nâng cao (endpoint mới GET /api/hotels/search)
+export const searchHotelsAPI = async ({ keyword, city, stars, minPrice, maxPrice, page = 1, limit = 20 } = {}) => {
+    try {
+        const params = new URLSearchParams();
+        if (keyword)  params.set('keyword',  keyword);
+        if (city)     params.set('city',     city);
+        if (stars)    params.set('stars',    stars);
+        if (minPrice) params.set('minPrice', minPrice);
+        if (maxPrice) params.set('maxPrice', maxPrice);
+        params.set('page',  page);
+        params.set('limit', limit);
+        const response = await api.get(`/api/hotels/search?${params.toString()}`);
+        return normalizePaginatedResponse(response.data);
+    } catch (error) {
+        console.warn("Lỗi tìm kiếm khách sạn:", error?.message || error);
+        return [];
+    }
+};
+
 
 export const getHotelByIdAPI = async (id) => {
     try {
@@ -120,6 +139,17 @@ export const getRoomsByHotelAPI = async (hotelId, page = 1, limit = 10) => {
     } catch (error) {
         console.warn(`Lỗi khi lấy danh sách phòng cho khách sạn ID ${hotelId}:`, error?.message || error);
         return [];
+    }
+};
+
+// Lấy chi tiết 1 phòng theo ID (endpoint mới GET /api/rooms/getRoomById/:id)
+export const getRoomByIdAPI = async (roomId) => {
+    try {
+        const response = await api.get(`/api/rooms/getRoomById/${roomId}`);
+        return response.data;
+    } catch (error) {
+        console.warn(`Lỗi khi lấy chi tiết phòng ID ${roomId}:`, error?.message || error);
+        return null;
     }
 };
 
@@ -188,10 +218,15 @@ export const getUserBookingsAPI = async (userId, page = 1, limit = 10) => {
 export const getAllBookingsAPI = async (page = 1, limit = 10) => {
     try {
         const response = await api.get(`/api/bookings/getAllBooking?page=${page}&limit=${limit}`);
-        return normalizePaginatedResponse(response.data);
+        // Trả về cả { data, pagination } thay vì chỉ mảng
+        const resData = response.data;
+        return {
+            data: resData?.data || [],
+            pagination: resData?.pagination || { currentPage: page, totalPages: 1, totalItems: 0, limit }
+        };
     } catch (error) {
         console.warn("Lỗi khi lấy danh sách tất cả đặt phòng:", error?.message || error);
-        return [];
+        return { data: [], pagination: { currentPage: 1, totalPages: 1, totalItems: 0, limit } };
     }
 };
 
@@ -247,9 +282,16 @@ export const getAllPaymentsAPI = async (page = 1, limit = 10) => {
 };
 
 // ==================== STATS APIs ====================
-export const getOwnerStatsAPI = async () => {
+/**
+ * @param {Object} params - { period: 'day'|'week'|'month'|'year', startDate: 'YYYY-MM-DD', endDate: 'YYYY-MM-DD' }
+ */
+export const getOwnerStatsAPI = async (params = {}) => {
     try {
-        const response = await api.get("/api/owner/stats");
+        const qs = new URLSearchParams();
+        if (params.period) qs.set('period', params.period);
+        if (params.startDate) qs.set('startDate', params.startDate);
+        if (params.endDate) qs.set('endDate', params.endDate);
+        const response = await api.get(`/api/owner/stats?${qs.toString()}`);
         return response.data?.data || null;
     } catch (error) {
         console.warn("Lỗi lấy thống kê Owner stats API:", error?.message || error);
@@ -257,9 +299,16 @@ export const getOwnerStatsAPI = async () => {
     }
 };
 
-export const getAdminStatsAPI = async () => {
+/**
+ * @param {Object} params - { period: 'day'|'week'|'month'|'year', startDate: 'YYYY-MM-DD', endDate: 'YYYY-MM-DD' }
+ */
+export const getAdminStatsAPI = async (params = {}) => {
     try {
-        const response = await api.get("/api/admin/stats");
+        const qs = new URLSearchParams();
+        if (params.period) qs.set('period', params.period);
+        if (params.startDate) qs.set('startDate', params.startDate);
+        if (params.endDate) qs.set('endDate', params.endDate);
+        const response = await api.get(`/api/admin/stats?${qs.toString()}`);
         return response.data?.data || null;
     } catch (error) {
         console.warn("Lỗi lấy thống kê Admin stats API:", error?.message || error);

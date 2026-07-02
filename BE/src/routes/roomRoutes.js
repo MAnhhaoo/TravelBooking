@@ -15,6 +15,29 @@ router.get("/getAllRoom", roomController.getAllRoom);
 
 /**
  * @swagger
+ * /api/rooms/getRoomById/{id}:
+ *   get:
+ *     tags:
+ *       - Rooms
+ *     summary: Lấy chi tiết 1 phòng theo ID
+ *     description: Trả về đầy đủ thông tin phòng gồm loại phòng, tiện nghi, ảnh và thông tin khách sạn
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: integer
+ *         required: true
+ *         description: ID của phòng cần xem
+ *     responses:
+ *       200:
+ *         description: Thành công
+ *       404:
+ *         description: Không tìm thấy phòng
+ */
+router.get("/getRoomById/:id", roomController.getRoomById);
+
+/**
+ * @swagger
  * /api/rooms/createRoom:
  *   post:
  *     tags:
