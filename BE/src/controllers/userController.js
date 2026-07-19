@@ -6,10 +6,20 @@ const getAllUsers = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
+    const keyword = req.query.keyword || req.query.search || "";
 
-    const totalItems = await prisma.users.count();
+    const where = keyword ? {
+      OR: [
+        { full_name: { contains: keyword } },
+        { email: { contains: keyword } },
+        { phone: { contains: keyword } }
+      ]
+    } : {};
+
+    const totalItems = await prisma.users.count({ where });
 
     const rawUsers = await prisma.users.findMany({
+      where,
       skip,
       take: limit,
       orderBy: { user_id: 'asc' },

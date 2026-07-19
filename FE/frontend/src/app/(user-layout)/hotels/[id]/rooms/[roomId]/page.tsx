@@ -3,8 +3,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { getRoomByIdAPI, getHotelByIdAPI } from "../../../../../../services/api";
+import { getRoomByIdAPI, getHotelByIdAPI, getRoomsByHotelAPI } from "../../../../../../services/api";
 import { motion, AnimatePresence } from "framer-motion";
+import { useSelector } from "react-redux";
 
 // ── Hằng số fallback đặt ngoài component để tránh tạo lại mỗi render ──────────
 const FALLBACK_IMAGES = [
@@ -43,6 +44,8 @@ const calcNights = (checkIn: string, checkOut: string): number => {
 export default function RoomDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const authUser = useSelector((state: any) => state.auth?.user);
+
   const hotelId = params?.id ? Number(params.id) : 1;
   const roomId = params?.roomId ? Number(params.roomId) : 1;
 
@@ -53,7 +56,14 @@ export default function RoomDetailPage() {
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
-  const [guests, setGuests] = useState(2);
+
+  // Ràng buộc số lượng khách theo tiện nghi phòng
+  const [adults, setAdults] = useState(2);
+  const [children, setChildren] = useState(0);
+
+  // Cấu hình giờ check-in / check-out linh động từ Owner
+  const [customCheckIn, setCustomCheckIn] = useState("14:00");
+  const [customCheckOut, setCustomCheckOut] = useState("12:00");
 
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0];
@@ -61,30 +71,47 @@ export default function RoomDetailPage() {
     setCheckIn(today);
     setCheckOut(tomorrow);
 
+    // Sync flexible time settings
+    if (hotelId) {
+      const savedTime = localStorage.getItem(`hotel_time_settings_${hotelId}`);
+      if (savedTime) {
+        try {
+          const parsed = JSON.parse(savedTime);
+          if (parsed.checkIn) setCustomCheckIn(parsed.checkIn);
+          if (parsed.checkOut) setCustomCheckOut(parsed.checkOut);
+        } catch (e) {}
+      }
+    }
+
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Gọi 2 API song song: lấy chi tiết phòng và thông tin khách sạn
-        const [roomRes, hotelRes]: any[] = await Promise.all([
-          getRoomByIdAPI(roomId),       // API mới: GET /api/rooms/getRoomById/:roomId
-          getHotelByIdAPI(hotelId),     // API hiện tại: GET /api/hotels/getHotelById/:id
+        const [roomRes, hotelRes, roomsRes]: any[] = await Promise.all([
+          getRoomByIdAPI(roomId),
+          getHotelByIdAPI(hotelId),
+          getRoomsByHotelAPI(hotelId, 1, 20),
         ]);
 
-        // Xử lý dữ liệu khách sạn (BE trả về trực tiếp object)
-        setHotel(hotelRes?.data || hotelRes || null);
+        const h = hotelRes?.data || hotelRes || null;
+        if (h) {
+          const roomList = Array.isArray(roomsRes) ? roomsRes : (roomsRes?.data || []);
+          if (!h.rooms || !h.rooms.length) h.rooms = roomList;
+          setHotel(h);
+        } else {
+          setHotel(null);
+        }
 
-        // Xử lý dữ liệu phòng từ response mới (BE trả về { message, data: {...} })
         const found = roomRes?.data || null;
         if (found) {
-          // Gán fallback cho các trường thiếu để không làm hỏng UI
           if (!found.room_images?.length) found.room_images = FALLBACK_IMAGES.map(url => ({ image_url: url }));
           if (!found.room_types?.description) found.room_types = { ...found.room_types, description: FALLBACK_DESCRIPTION };
           if (!found.room_types?.room_type_amenities?.length) {
             found.room_types.room_type_amenities = FALLBACK_AMENITIES.map(name => ({ amenities: { amenity_name: name } }));
           }
           setRoom(found);
+          const maxA = Number(found.room_types?.max_guest || 4);
+          setAdults(Math.min(2, maxA));
         } else {
-          // Phòng không tồn tại trong DB — dùng skeleton data
           setRoom({
             room_id: roomId,
             room_number: "305",
@@ -108,7 +135,6 @@ export default function RoomDetailPage() {
     fetchData();
   }, [hotelId, roomId]);
 
-  // useMemo để tránh tính toán lại mỗi render
   const images = useMemo(
     () => room?.room_images?.map((img: any) => img.image_url) ?? FALLBACK_IMAGES,
     [room]
@@ -124,7 +150,17 @@ export default function RoomDetailPage() {
   const nights = useMemo(() => calcNights(checkIn, checkOut), [checkIn, checkOut]);
   const totalPrice = useMemo(() => (room?.price_per_night || 2850000) * nights, [room, nights]);
 
+  const maxAdults = Number(room?.room_types?.max_guest || 4);
+  const maxChildren = Math.max(1, Math.floor(maxAdults / 2));
+
   const handleBookNow = () => {
+    if (!authUser && !localStorage.getItem("token")) {
+      alert("Vui lòng đăng nhập tài khoản để tiến hành đặt phòng và thanh toán!");
+      router.push("/login");
+      return;
+    }
+    const totalGuests = adults + children;
+    const guestDesc = `${adults} người lớn${children > 0 ? `, ${children} trẻ em` : ""}`;
     sessionStorage.setItem(
       "booking_draft",
       JSON.stringify({
@@ -136,12 +172,15 @@ export default function RoomDetailPage() {
         price_per_night: room?.price_per_night || 2850000,
         check_in: checkIn,
         check_out: checkOut,
-        guest_count: guests,
+        guest_count: totalGuests,
+        guest_details: guestDesc,
         total_price: totalPrice,
       })
     );
-    // Sau khi lưu draft, điều hướng về trang khách sạn để tiến hành checkout
-    router.push(`/hotel/${hotelId}`);
+    // Chuyển thẳng qua trang thanh toán checkout theo yêu cầu logic
+    router.push(
+      `/bookings/checkout?hotelId=${hotelId}&roomId=${roomId}&price=${room?.price_per_night || 2850000}&hotelName=${encodeURIComponent(hotel?.hotel_name || "Khách sạn")}&roomNumber=${encodeURIComponent(room?.room_number || "305")}&guests=${totalGuests}`
+    );
   };
 
   if (loading) {
@@ -310,7 +349,7 @@ export default function RoomDetailPage() {
               <ul className="space-y-3 text-xs md:text-sm text-slate-300 list-disc pl-5">
                 <li><strong className="text-white">Hủy miễn phí:</strong> Hoàn tiền 100% nếu hủy trước ngày nhận phòng ít nhất 48 giờ.</li>
                 <li><strong className="text-white">Hủy muộn:</strong> Tính phí đêm đầu tiên nếu hủy trong vòng 48 giờ trước giờ check-in.</li>
-                <li><strong className="text-white">Giờ nhận phòng:</strong> Từ 14:00 chiều • <strong className="text-white">Giờ trả phòng:</strong> Trước 12:00 trưa.</li>
+                <li><strong className="text-white">Giờ nhận phòng:</strong> Từ {customCheckIn} • <strong className="text-white">Giờ trả phòng:</strong> Trước {customCheckOut}.</li>
                 <li><strong className="text-white">Quy định khác:</strong> Không hút thuốc trong phòng, không mang theo thú cưng.</li>
               </ul>
             </div>
@@ -350,17 +389,37 @@ export default function RoomDetailPage() {
                 ))}
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">Số lượng khách</label>
-                <select
-                  value={guests}
-                  onChange={(e) => setGuests(Number(e.target.value))}
-                  className="w-full bg-[#070c1e] border border-slate-700 rounded-xl px-3 py-2.5 text-white text-xs outline-none focus:border-[#e5c158]"
-                >
-                  {[1, 2, 3, 4].map((n) => (
-                    <option key={n} value={n}>👥 {n} Khách người lớn</option>
-                  ))}
-                </select>
+              {/* Ràng buộc số lượng khách theo đúng mô tả tiện nghi phòng */}
+              <div className="bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-300">Người lớn (Tối đa {maxAdults})</span>
+                  <select
+                    value={adults}
+                    onChange={(e) => setAdults(Number(e.target.value))}
+                    className="bg-[#070c1e] border border-slate-700 rounded-lg px-2.5 py-1 text-white text-xs font-bold outline-none focus:border-[#e5c158]"
+                  >
+                    {Array.from({ length: maxAdults }, (_, i) => i + 1).map((n) => (
+                      <option key={n} value={n}>{n} người lớn</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-300">Trẻ em (Tối đa {maxChildren})</span>
+                  <select
+                    value={children}
+                    onChange={(e) => setChildren(Number(e.target.value))}
+                    className="bg-[#070c1e] border border-slate-700 rounded-lg px-2.5 py-1 text-white text-xs font-bold outline-none focus:border-[#e5c158]"
+                  >
+                    {Array.from({ length: maxChildren + 1 }, (_, i) => i).map((n) => (
+                      <option key={n} value={n}>{n} trẻ em</option>
+                    ))}
+                  </select>
+                </div>
+
+                <p className="text-[10px] text-amber-400/90 leading-tight pt-1 border-t border-slate-800">
+                  💡 Ràng buộc tiện nghi phòng: chỉ cho phép chọn tối đa {maxAdults} người lớn và {maxChildren} trẻ em.
+                </p>
               </div>
             </div>
 
@@ -392,6 +451,54 @@ export default function RoomDetailPage() {
             </p>
           </div>
 
+        </div>
+
+        {/* ── GỢI Ý CÁC PHÒNG KHÁC CÙNG KHÁCH SẠN ── */}
+        <div className="mt-16 pt-12 border-t border-slate-800/80">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <span className="text-xs font-bold text-[#e5c158] tracking-widest uppercase block mb-1">Cùng khách sạn</span>
+              <h2 className="text-2xl font-serif text-white">Gợi Ý Các Phòng Khác Khả Dụng</h2>
+            </div>
+            <Link href={`/hotel/${hotelId}`} className="text-xs font-bold text-[#e5c158] hover:underline">
+              Xem toàn bộ phòng →
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {(hotel?.rooms || [])
+              .filter((r: any) => Number(r.room_id) !== Number(roomId))
+              .slice(0, 3)
+              .map((rec: any, idx: number) => {
+                const img = rec?.room_images?.[0]?.image_url || FALLBACK_IMAGES[idx % FALLBACK_IMAGES.length];
+                return (
+                  <div key={rec.room_id || idx} className="bg-[#0f1736] border border-slate-800 rounded-2xl overflow-hidden hover:border-[#e5c158]/30 transition group flex flex-col justify-between shadow-lg">
+                    <div className="relative h-44 overflow-hidden">
+                      <img src={img} alt="" className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
+                      <span className="absolute top-3 right-3 bg-black/60 backdrop-blur-md text-[#e5c158] font-bold text-xs px-2.5 py-1 rounded-full border border-yellow-500/30">
+                        {formatVND(rec.price_per_night || 2500000)}/đêm
+                      </span>
+                    </div>
+                    <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                      <div>
+                        <h4 className="font-bold text-white group-hover:text-[#e5c158] transition">Phòng {rec.room_number || "Tiêu chuẩn"}</h4>
+                        <p className="text-xs text-slate-400 mt-1">{rec.room_types?.type_name || "Phòng cao cấp"}</p>
+                      </div>
+                      <Link href={`/hotels/${hotelId}/rooms/${rec.room_id}`} className="block">
+                        <button className="w-full py-2.5 bg-slate-800/80 hover:bg-[#e5c158] hover:text-black text-slate-300 font-bold text-xs rounded-xl transition border border-slate-700/60">
+                          Xem chi tiết phòng
+                        </button>
+                      </Link>
+                    </div>
+                  </div>
+                );
+              })}
+            {(hotel?.rooms || []).filter((r: any) => Number(r.room_id) !== Number(roomId)).length === 0 && (
+              <div className="col-span-3 text-center py-8 text-slate-500 text-sm bg-slate-900/40 rounded-2xl border border-slate-800/50">
+                Khách sạn hiện đang chuẩn bị thêm các hạng phòng khác. Vui lòng quay lại sau!
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

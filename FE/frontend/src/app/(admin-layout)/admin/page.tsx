@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getUsersAPI, getHotelsAPI, updateHotelStatusAPI, getAdminStatsAPI, getAllBookingsAPI } from "../../../services/api";
+import { getUsersAPI, getHotelsAPI, updateHotelStatusAPI, getAdminStatsAPI, getAllBookingsAPI, getRoomsByHotelAPI, updateRoomStatusAPI } from "../../../services/api";
 import { mapUserRole, formatDate } from "../../../utils/dataMappers";
 import { motion } from "framer-motion";
+import AdminVouchersManager from "../../../components/AdminVouchersManager";
 
 // Pagination component for admin
 function Pagination({ currentPage, totalPages, onPageChange }: { currentPage: number; totalPages: number; onPageChange: (p: number) => void }) {
@@ -18,11 +19,10 @@ function Pagination({ currentPage, totalPages, onPageChange }: { currentPage: nu
       </button>
       {pages.map(p => (
         <button key={p} onClick={() => onPageChange(p)}
-          className={`w-8 h-8 rounded-lg text-xs font-bold transition border ${
-            p === currentPage
-              ? "bg-yellow-500 text-black border-yellow-500 shadow"
-              : "bg-[#111c38] border-blue-900/40 text-slate-300 hover:bg-[#1e2f4d]"
-          }`}>{p}</button>
+          className={`w-8 h-8 rounded-lg text-xs font-bold transition border ${p === currentPage
+            ? "bg-yellow-500 text-black border-yellow-500 shadow"
+            : "bg-[#111c38] border-blue-900/40 text-slate-300 hover:bg-[#1e2f4d]"
+            }`}>{p}</button>
       ))}
       {totalPages > 7 && <span className="text-slate-500 text-xs">...</span>}
       <button onClick={() => onPageChange(currentPage + 1)} disabled={currentPage === totalPages}
@@ -36,14 +36,31 @@ function Pagination({ currentPage, totalPages, onPageChange }: { currentPage: nu
 export default function AdminDashboardPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [hotels, setHotels] = useState<any[]>([]);
+  const [allHotels, setAllHotels] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
 
-  // Bookings pagination
+  // Users pagination & search
+  const [userPage, setUserPage] = useState(1);
+  const [userPagination, setUserPagination] = useState<any>(null);
+  const [userSearch, setUserSearch] = useState("");
+
+  // Hotels pagination & search
+  const [hotelPage, setHotelPage] = useState(1);
+  const [hotelPagination, setHotelPagination] = useState<any>(null);
+  const [hotelSearch, setHotelSearch] = useState("");
+
+  // Bookings pagination & search
   const [bookingPage, setBookingPage] = useState(1);
   const [bookingPagination, setBookingPagination] = useState<any>(null);
+  const [bookingSearch, setBookingSearch] = useState("");
+
+  // Admin Room Management for Selected Hotel
+  const [selectedHotelForRooms, setSelectedHotelForRooms] = useState<any>(null);
+  const [hotelRoomsList, setHotelRoomsList] = useState<any[]>([]);
+  const [roomsLoading, setRoomsLoading] = useState(false);
 
   // Stats time filter
   const [statsPeriod, setStatsPeriod] = useState("month");
@@ -73,7 +90,15 @@ export default function AdminDashboardPage() {
     const handleTabChange = (e: any) => {
       if (e.detail) setActiveTab(e.detail);
     };
+    const handleSearch = (e: any) => {
+      if (e.detail !== undefined) {
+        setHotelSearch(e.detail);
+        setHotelPage(1);
+        setActiveTab("hotels");
+      }
+    };
     window.addEventListener("admin-tab-change", handleTabChange);
+    window.addEventListener("admin-search", handleSearch);
 
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
@@ -81,20 +106,27 @@ export default function AdminDashboardPage() {
       if (tab) setActiveTab(tab);
     }
 
-    return () => window.removeEventListener("admin-tab-change", handleTabChange);
+    return () => {
+      window.removeEventListener("admin-tab-change", handleTabChange);
+      window.removeEventListener("admin-search", handleSearch);
+    };
   }, []);
 
   useEffect(() => {
     const fetchAdminData = async () => {
       setLoading(true);
       try {
-        const [usersData, hotelsData, statsData] = await Promise.all([
-          getUsersAPI(),
-          getHotelsAPI(),
+        const [usersData, hotelsData, allHotelsData, statsData] = await Promise.all([
+          getUsersAPI(userPage, 10, userSearch),
+          getHotelsAPI(hotelPage, 10, hotelSearch),
+          getHotelsAPI(1, 1000, ""),
           getAdminStatsAPI({ period: "month" })
         ]);
         setUsers(usersData || []);
+        if ((usersData as any)?.pagination) setUserPagination((usersData as any).pagination);
         setHotels(hotelsData || []);
+        if ((hotelsData as any)?.pagination) setHotelPagination((hotelsData as any).pagination);
+        setAllHotels(allHotelsData || []);
         setStats(statsData);
       } catch (error) {
         console.error("Lỗi fetch dữ liệu Admin:", error);
@@ -105,11 +137,39 @@ export default function AdminDashboardPage() {
     fetchAdminData();
   }, []);
 
-  // Fetch bookings với phân trang
+  // Fetch users với phân trang & search
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const res: any = await getUsersAPI(userPage, 10, userSearch);
+        setUsers(res || []);
+        if (res?.pagination) setUserPagination(res.pagination);
+      } catch (err) {
+        console.error("Lỗi fetch users admin:", err);
+      }
+    };
+    fetchUsers();
+  }, [userPage, userSearch]);
+
+  // Fetch hotels với phân trang & search
+  useEffect(() => {
+    const fetchHotels = async () => {
+      try {
+        const res: any = await getHotelsAPI(hotelPage, 10, hotelSearch);
+        setHotels(res || []);
+        if (res?.pagination) setHotelPagination(res.pagination);
+      } catch (err) {
+        console.error("Lỗi fetch hotels admin:", err);
+      }
+    };
+    fetchHotels();
+  }, [hotelPage, hotelSearch]);
+
+  // Fetch bookings với phân trang & tìm kiếm
   useEffect(() => {
     const fetchBookings = async () => {
       try {
-        const res: any = await getAllBookingsAPI(bookingPage, 10);
+        const res: any = await getAllBookingsAPI(bookingPage, 10, bookingSearch);
         setBookings(res?.data || []);
         if (res?.pagination) setBookingPagination(res.pagination);
       } catch (err) {
@@ -117,7 +177,34 @@ export default function AdminDashboardPage() {
       }
     };
     fetchBookings();
-  }, [bookingPage]);
+  }, [bookingPage, bookingSearch]);
+
+  // Helper cho Admin Quản lý Phòng của Khách sạn
+  const fetchRoomsForHotel = async (hotel: any) => {
+    setSelectedHotelForRooms(hotel);
+    setRoomsLoading(true);
+    try {
+      const res: any = await getRoomsByHotelAPI(hotel.hotel_id, 1, 100);
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      setHotelRoomsList(list);
+    } catch (err) {
+      console.error("Lỗi khi admin lấy phòng của KS:", err);
+      setHotelRoomsList([]);
+    } finally {
+      setRoomsLoading(false);
+    }
+  };
+
+  const handleUpdateRoomStatusByAdmin = async (roomId: number, status: number) => {
+    try {
+      await updateRoomStatusAPI(roomId, status);
+      if (selectedHotelForRooms) {
+        fetchRoomsForHotel(selectedHotelForRooms);
+      }
+    } catch (err) {
+      alert("Cập nhật trạng thái phòng thất bại!");
+    }
+  };
 
   // Fetch stats với bộ lọc
   const handleFetchStats = async () => {
@@ -314,7 +401,7 @@ export default function AdminDashboardPage() {
             {/* Bộ lọc thời gian */}
             <div className="flex flex-wrap items-end gap-2">
               <div className="flex gap-1.5">
-                {[{id:"day",label:"Hôm nay"},{id:"week",label:"Tuần"},{id:"month",label:"Tháng"},{id:"year",label:"Năm"},{id:"custom",label:"Tùy chọn"}].map(opt => (
+                {[{ id: "day", label: "Hôm nay" }, { id: "week", label: "Tuần" }, { id: "month", label: "Tháng" }, { id: "year", label: "Năm" }, { id: "custom", label: "Tùy chọn" }].map(opt => (
                   <button key={opt.id} onClick={() => setStatsPeriod(opt.id)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border ${statsPeriod === opt.id ? "bg-yellow-500 text-black border-yellow-500" : "bg-[#111c38] border-blue-900/40 text-slate-300 hover:bg-[#1e2f4d]"}`}>
                     {opt.label}
@@ -473,8 +560,8 @@ export default function AdminDashboardPage() {
                   <div key={idx} className="flex flex-col items-center h-full justify-end group">
                     <span className="text-[10px] text-yellow-400 font-bold mb-1 opacity-0 group-hover:opacity-100 transition-opacity">{item.rate}%</span>
                     <div className="w-7 bg-slate-800 rounded-t-lg h-36 flex items-end overflow-hidden">
-                      <div 
-                        className={`w-full rounded-t-lg transition-all duration-500 ${idx >= 4 ? "bg-gradient-to-t from-yellow-500 to-yellow-300" : "bg-gradient-to-t from-yellow-700/80 to-yellow-500/80"}`} 
+                      <div
+                        className={`w-full rounded-t-lg transition-all duration-500 ${idx >= 4 ? "bg-gradient-to-t from-yellow-500 to-yellow-300" : "bg-gradient-to-t from-yellow-700/80 to-yellow-500/80"}`}
                         style={{ height: `${item.rate}%` }}
                       ></div>
                     </div>
@@ -517,17 +604,131 @@ export default function AdminDashboardPage() {
         </motion.div>
       )}
 
-      {/* ===================== TAB: HOTELS MANAGEMENT ===================== */}
-      {activeTab === "hotels" && (
+      {/* ===================== TAB: HOTELS MANAGEMENT & ROOMS MANAGEMENT ===================== */}
+      {activeTab === "hotels" && selectedHotelForRooms ? (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-[#111c38] rounded-2xl border border-blue-900/40 shadow-xl p-6">
-          <div className="flex justify-between items-center mb-6 border-b border-blue-900/30 pb-4">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6 border-b border-blue-900/30 pb-4">
             <div>
-              <h2 className="text-xl font-bold text-white">🏢 Duyệt Khách Sạn</h2>
-              <p className="text-xs text-slate-400 mt-1">Danh sách tất cả các khách sạn trên hệ thống ({hotels.length})</p>
+              <button
+                onClick={() => setSelectedHotelForRooms(null)}
+                className="text-yellow-400 hover:underline text-xs font-bold mb-2 inline-flex items-center gap-1 cursor-pointer"
+              >
+                ← Quay lại danh sách Khách sạn
+              </button>
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <span>🛏️</span> Quản lý Phòng Khách sạn: <span className="text-yellow-400">{selectedHotelForRooms.hotel_name}</span>
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Địa chỉ: {selectedHotelForRooms.address || "—"}, {selectedHotelForRooms.city} | ID Khách sạn: #{selectedHotelForRooms.hotel_id}
+              </p>
             </div>
-            <button onClick={() => window.dispatchEvent(new CustomEvent("admin-tab-change", { detail: "overview" }))} className="px-4 py-2 bg-[#18284c] hover:bg-blue-900/50 text-yellow-400 rounded-xl text-xs font-bold border border-yellow-500/30 transition-all">
-              ← Quay lại Dashboard
+            <button
+              onClick={() => setSelectedHotelForRooms(null)}
+              className="px-4 py-2 bg-[#18284c] hover:bg-blue-900/50 text-white rounded-xl text-xs font-bold border border-blue-500/30 transition-all shrink-0 cursor-pointer"
+            >
+              ✕ Đóng quản lý phòng
             </button>
+          </div>
+
+          {roomsLoading ? (
+            <div className="py-12 text-center text-slate-400 text-sm">Đang tải danh sách phòng...</div>
+          ) : hotelRoomsList.length === 0 ? (
+            <div className="py-12 text-center bg-black/20 rounded-2xl border border-slate-800/60 text-slate-400 text-sm">
+              Khách sạn này hiện chưa có phòng nào trên hệ thống.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-[#0a1128] text-slate-400 text-xs uppercase tracking-wider border-b border-blue-900/30">
+                  <tr>
+                    <th className="p-4 rounded-tl-xl">Mã / Số phòng</th>
+                    <th className="p-4 px-6">Hạng phòng & Mô tả</th>
+                    <th className="p-4 px-6">Giá mỗi đêm</th>
+                    <th className="p-4">Sức chứa</th>
+                    <th className="p-4 px-6">Trạng thái</th>
+                    <th className="p-4 rounded-tr-xl text-right">Hành động</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-blue-900/20 text-sm">
+                  {hotelRoomsList.map((room) => (
+                    <tr key={room.room_id} className="hover:bg-white/5 transition">
+                      <td className="p-4 font-bold text-white">
+                        <div className="flex items-center gap-2">
+                          <span className="bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded text-xs font-mono">
+                            #{room.room_id}
+                          </span>
+                          <span>Phòng {room.room_number || "—"}</span>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <p className="font-bold text-slate-200">{room.room_types?.type_name || "Phòng tiêu chuẩn"}</p>
+                        <p className="text-xs text-slate-400 line-clamp-1 mt-0.5">{room.room_types?.description || "Không có mô tả"}</p>
+                      </td>
+                      <td className="p-4 font-bold text-yellow-400">
+                        {Number(room.price_per_night || 0).toLocaleString("vi-VN")} đ
+                      </td>
+                      <td className="p-4 text-slate-300">
+                        {room.room_types?.max_guest || 2} khách
+                      </td>
+                      <td className="p-4">
+                        {room.status === 1 ? (
+                          <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-bold">Khả dụng</span>
+                        ) : room.status === 2 ? (
+                          <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1 rounded-full text-xs font-bold">Bảo trì</span>
+                        ) : (
+                          <span className="bg-rose-500/20 text-rose-400 border border-rose-500/30 px-3 py-1 rounded-full text-xs font-bold">Đã khóa</span>
+                        )}
+                      </td>
+                      <td className="p-4 text-right space-x-2">
+                        {room.status !== 1 && (
+                          <button
+                            onClick={() => handleUpdateRoomStatusByAdmin(room.room_id, 1)}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1 rounded-lg transition cursor-pointer"
+                          >
+                            Mở khóa
+                          </button>
+                        )}
+                        {room.status !== 0 && (
+                          <button
+                            onClick={() => handleUpdateRoomStatusByAdmin(room.room_id, 0)}
+                            className="bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold px-3 py-1 rounded-lg transition cursor-pointer"
+                          >
+                            Khóa phòng
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </motion.div>
+      ) : activeTab === "hotels" && !selectedHotelForRooms ? (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-[#111c38] rounded-2xl border border-blue-900/40 shadow-xl p-6">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6 border-b border-blue-900/30 pb-4">
+            <div>
+              <h2 className="text-xl font-bold text-white">🏢 Duyệt & Quản lý Khách Sạn</h2>
+              <p className="text-xs text-slate-400 mt-1">Danh sách tất cả các khách sạn trên hệ thống ({hotelPagination?.totalItems || hotels.length}) — Nhấn "Quản lý phòng" để xem chi tiết phòng</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative w-64">
+                <input
+                  type="text"
+                  placeholder="Tìm tên khách sạn, thành phố..."
+                  value={hotelSearch}
+                  onChange={(e) => { setHotelSearch(e.target.value); setHotelPage(1); }}
+                  className="w-full bg-[#0a1128] border border-blue-900/60 rounded-xl px-3.5 py-2 pl-9 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-yellow-500 transition"
+                />
+                <span className="absolute left-3 top-2.5 text-slate-500 text-xs">🔍</span>
+                {hotelSearch && (
+                  <button onClick={() => { setHotelSearch(""); setHotelPage(1); }} className="absolute right-3 top-2 text-slate-400 hover:text-white text-xs font-bold">✕</button>
+                )}
+              </div>
+              <button onClick={() => window.dispatchEvent(new CustomEvent("admin-tab-change", { detail: "overview" }))} className="px-4 py-2 bg-[#18284c] hover:bg-blue-900/50 text-yellow-400 rounded-xl text-xs font-bold border border-yellow-500/30 transition-all shrink-0">
+                ← Dashboard
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -545,10 +746,13 @@ export default function AdminDashboardPage() {
                 {hotels.map((hotel) => (
                   <tr key={hotel.hotel_id} className="hover:bg-white/5 transition">
                     <td className="p-4">
-                      <div className="flex items-center gap-3">
-                        <img src={hotel.hotel_images?.[0]?.image_url || "/placeholder.jpg"} className="w-12 h-12 rounded-xl object-cover border border-slate-700" alt="" />
+                      <div className="flex items-center gap-3 cursor-pointer group" onClick={() => fetchRoomsForHotel(hotel)} title="Nhấn để xem các phòng của khách sạn này">
+                        <img src={hotel.hotel_images?.[0]?.image_url || "/placeholder.jpg"} className="w-12 h-12 rounded-xl object-cover border border-slate-700 group-hover:border-yellow-400 transition" alt="" />
                         <div>
-                          <p className="font-bold text-white">{hotel.hotel_name}</p>
+                          <p className="font-bold text-white group-hover:text-yellow-400 transition flex items-center gap-1.5">
+                            <span>{hotel.hotel_name}</span>
+                            <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-1.5 py-0.5 rounded">Phòng →</span>
+                          </p>
                           <p className="text-xs text-yellow-400">{"★".repeat(hotel.star_rating || 5)}</p>
                         </div>
                       </div>
@@ -563,41 +767,69 @@ export default function AdminDashboardPage() {
                       )}
                     </td>
                     <td className="p-4">
-                      {hotel.status === 0 ? (
-                        <button 
-                          onClick={() => handleUpdateHotelStatus(hotel.hotel_id, 1)}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition shadow"
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => fetchRoomsForHotel(hotel)}
+                          className="bg-blue-600/80 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition shadow flex items-center gap-1 cursor-pointer"
                         >
-                          Phê duyệt
+                          <span>🛏️</span> Quản lý phòng
                         </button>
-                      ) : (
-                        <button 
-                          onClick={() => handleUpdateHotelStatus(hotel.hotel_id, 0)}
-                          className="bg-rose-600/80 hover:bg-rose-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition shadow"
-                        >
-                          Tạm ngưng
-                        </button>
-                      )}
+                        {hotel.status === 0 ? (
+                          <button
+                            onClick={() => handleUpdateHotelStatus(hotel.hotel_id, 1)}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition shadow cursor-pointer"
+                          >
+                            Phê duyệt
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleUpdateHotelStatus(hotel.hotel_id, 0)}
+                            className="bg-rose-600/80 hover:bg-rose-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition shadow cursor-pointer"
+                          >
+                            Tạm ngưng
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          <Pagination
+            currentPage={hotelPagination?.currentPage || 1}
+            totalPages={hotelPagination?.totalPages || 1}
+            onPageChange={setHotelPage}
+          />
         </motion.div>
-      )}
+      ) : null}
 
       {/* ===================== TAB: USERS MANAGEMENT ===================== */}
       {activeTab === "users" && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-[#111c38] rounded-2xl border border-blue-900/40 shadow-xl p-6">
-          <div className="flex justify-between items-center mb-6 border-b border-blue-900/30 pb-4">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6 border-b border-blue-900/30 pb-4">
             <div>
               <h2 className="text-xl font-bold text-white">👤 Quản lý Người dùng</h2>
-              <p className="text-xs text-slate-400 mt-1">Danh sách tất cả tài khoản trong hệ thống ({users.length})</p>
+              <p className="text-xs text-slate-400 mt-1">Danh sách tất cả tài khoản trong hệ thống ({userPagination?.totalItems || users.length})</p>
             </div>
-            <button onClick={() => window.dispatchEvent(new CustomEvent("admin-tab-change", { detail: "overview" }))} className="px-4 py-2 bg-[#18284c] hover:bg-blue-900/50 text-yellow-400 rounded-xl text-xs font-bold border border-yellow-500/30 transition-all">
-              ← Quay lại Dashboard
-            </button>
+            <div className="flex items-center gap-3">
+              <div className="relative w-64">
+                <input
+                  type="text"
+                  placeholder="Tìm tên, email, số điện thoại..."
+                  value={userSearch}
+                  onChange={(e) => { setUserSearch(e.target.value); setUserPage(1); }}
+                  className="w-full bg-[#0a1128] border border-blue-900/60 rounded-xl px-3.5 py-2 pl-9 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-yellow-500 transition"
+                />
+                <span className="absolute left-3 top-2.5 text-slate-500 text-xs">🔍</span>
+                {userSearch && (
+                  <button onClick={() => { setUserSearch(""); setUserPage(1); }} className="absolute right-3 top-2 text-slate-400 hover:text-white text-xs font-bold">✕</button>
+                )}
+              </div>
+              <button onClick={() => window.dispatchEvent(new CustomEvent("admin-tab-change", { detail: "overview" }))} className="px-4 py-2 bg-[#18284c] hover:bg-blue-900/50 text-yellow-400 rounded-xl text-xs font-bold border border-yellow-500/30 transition-all shrink-0">
+                ← Quay lại Dashboard
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -631,11 +863,16 @@ export default function AdminDashboardPage() {
               </tbody>
             </table>
           </div>
+          <Pagination
+            currentPage={userPagination?.currentPage || 1}
+            totalPages={userPagination?.totalPages || 1}
+            onPageChange={setUserPage}
+          />
         </motion.div>
       )}
 
       {/* ===================== TAB: BOOKINGS MANAGEMENT ===================== */}
-      {activeTab === "bookings" && (
+      {/* {activeTab === "bookings" && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-[#111c38] rounded-2xl border border-blue-900/40 shadow-xl p-6">
           <div className="flex justify-between items-center mb-6 border-b border-blue-900/30 pb-4">
             <div>
@@ -652,7 +889,7 @@ export default function AdminDashboardPage() {
             <p className="text-sm">Vui lòng chuyển qua tab Tổng quan để xem biểu đồ và phân tích chi tiết doanh thu đặt phòng.</p>
           </div>
         </motion.div>
-      )}
+      )} */}
 
       {/* ===================== TAB: SETTINGS (HỒ SƠ / PROFILE) ===================== */}
       {(activeTab === "settings" || activeTab === "settings-profile") && (
@@ -967,13 +1204,26 @@ export default function AdminDashboardPage() {
       {/* ===================== TAB: BOOKINGS (PHÂN TRANG, ORDER DESC) ===================== */}
       {activeTab === "bookings" && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-white">Quản lý Đặt phòng</h1>
               <p className="text-xs text-slate-400 mt-1">
                 {bookingPagination ? `Tổng ${bookingPagination.totalItems} đơn đặt phòng` : "Đang tải..."}
                 {" · "} Sắp xếp theo mới nhất
               </p>
+            </div>
+            <div className="relative w-full sm:w-80">
+              <input
+                type="text"
+                placeholder="Tìm mã đơn, tên khách, SĐT, KS..."
+                value={bookingSearch}
+                onChange={(e) => { setBookingSearch(e.target.value); setBookingPage(1); }}
+                className="w-full bg-[#111c38] border border-blue-900/60 rounded-xl px-4 py-2 pl-10 text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:border-yellow-500/50"
+              />
+              <span className="absolute left-3.5 top-2.5 text-slate-400 text-sm">🔍</span>
+              {bookingSearch && (
+                <button onClick={() => { setBookingSearch(""); setBookingPage(1); }} className="absolute right-3 top-2.5 text-slate-400 hover:text-white text-xs font-bold">✕</button>
+              )}
             </div>
           </div>
 
@@ -993,10 +1243,10 @@ export default function AdminDashboardPage() {
                 <tbody className="divide-y divide-blue-900/20 text-sm">
                   {bookings.map((b: any) => {
                     const statusMap: Record<number, { label: string; cls: string }> = {
-                      0: { label: "Chờ duyệt",    cls: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" },
-                      1: { label: "Đã xác nhận",  cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
+                      0: { label: "Chờ duyệt", cls: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" },
+                      1: { label: "Đã xác nhận", cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
                       2: { label: "Đang lưu trú", cls: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
-                      3: { label: "Hoàn thành",   cls: "bg-slate-500/10 text-slate-400 border-slate-500/20" },
+                      3: { label: "Hoàn thành", cls: "bg-slate-500/10 text-slate-400 border-slate-500/20" },
                     };
                     const st = statusMap[Number(b.status)] || { label: "Không rõ", cls: "bg-slate-700 text-slate-400 border-slate-600" };
                     const customerName = b.users?.full_name || "Ẩn danh";
@@ -1051,6 +1301,9 @@ export default function AdminDashboardPage() {
           </div>
         </motion.div>
       )}
+
+      {/* ===================== TAB: VOUCHERS ===================== */}
+      {activeTab === "vouchers" && <AdminVouchersManager hotels={allHotels.length > 0 ? allHotels : hotels} />}
     </div>
   );
 }

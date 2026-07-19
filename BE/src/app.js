@@ -9,6 +9,7 @@ const roomRoute = require("./routes/roomRoutes");
 const paymentRoute = require("./routes/paymentRoutes");
 const reviewRoute = require("./routes/reviewRoutes");
 const bookingRoute = require("./routes/bookingRoutes");
+const voucherRoute = require("./routes/voucherRoutes");
 const statsController = require("./controllers/statsController");
 const { authenticate, checkRole } = require("./middlewares/authMiddleware");
 const app = express();
@@ -38,6 +39,7 @@ const swaggerOptions = {
       { name: 'Payments', description: 'Quản lý thanh toán' },
       { name: 'Reviews', description: 'Quản lý đánh giá' },
       { name: 'Bookings', description: 'Quản lý đặt khách sạn' },
+      { name: 'Vouchers', description: 'Quản lý mã giảm giá' },
     ],
     paths: {}, // XÓA SẠCH ĐỂ TRỐNG Ở ĐÂY, KHÔNG GÕ TAY NỮA
   },
@@ -66,6 +68,7 @@ app.use('/api/payments', paymentRoute);
 app.use('/api/reviews', reviewRoute);
 
 app.use('/api/bookings', bookingRoute);
+app.use('/api/vouchers', voucherRoute);
 // 4. Lắng nghe cổng
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => {

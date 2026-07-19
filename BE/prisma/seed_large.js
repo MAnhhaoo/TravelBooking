@@ -35,12 +35,29 @@ async function main() {
     create: { full_name: 'Nguyễn Văn Chủ', email: 'owner@travelbooking.com', password: passwordHash, phone: '0912345678', role: 1 }
   });
 
-  // Tạo thêm owner thứ 2 để dữ liệu phong phú hơn
+  // Tạo thêm owner thứ 2, 3, 4, 5 để dữ liệu phong phú và phân bổ đều khách sạn
   const ownerUser2 = await prisma.users.upsert({
     where: { email: 'owner2@travelbooking.com' },
     update: { password: passwordHash },
     create: { full_name: 'Trần Thị Chủ', email: 'owner2@travelbooking.com', password: passwordHash, phone: '0913456789', role: 1 }
   });
+  const ownerUser3 = await prisma.users.upsert({
+    where: { email: 'owner3@travelbooking.com' },
+    update: { password: passwordHash },
+    create: { full_name: 'Lê Văn Chủ 3', email: 'owner3@travelbooking.com', password: passwordHash, phone: '0914567890', role: 1 }
+  });
+  const ownerUser4 = await prisma.users.upsert({
+    where: { email: 'owner4@travelbooking.com' },
+    update: { password: passwordHash },
+    create: { full_name: 'Phạm Văn Chủ 4', email: 'owner4@travelbooking.com', password: passwordHash, phone: '0915678901', role: 1 }
+  });
+  const ownerUser5 = await prisma.users.upsert({
+    where: { email: 'owner5@travelbooking.com' },
+    update: { password: passwordHash },
+    create: { full_name: 'Hoàng Văn Chủ 5', email: 'owner5@travelbooking.com', password: passwordHash, phone: '0916789012', role: 1 }
+  });
+
+  const ownersList = [ownerUser.user_id, ownerUser2.user_id, ownerUser3.user_id, ownerUser4.user_id, ownerUser5.user_id];
 
   // Tạo danh sách 12 khách hàng để viết review chân thực
   const customers = [];
@@ -697,11 +714,12 @@ async function main() {
   // 7. Tạo Hotels, Rooms (kèm ảnh phòng), Reviews
   let hotelCount = 0;
   const createdRooms = []; // Lưu lại rooms để tạo bookings sau
+  const createdHotels = []; // Lưu lại hotels cho vouchers sau
 
   for (let hIdx = 0; hIdx < HOTELS_DATA.length; hIdx++) {
     const h = HOTELS_DATA[hIdx];
     const imgUrls = IMAGES_POOL[h.pool] || IMAGES_POOL.hanoi;
-    const assignedOwnerId = hIdx < 4 ? ownerUser.user_id : ownerUser2.user_id;
+    const assignedOwnerId = ownersList[hIdx % ownersList.length];
 
     const createdHotel = await prisma.hotels.create({
       data: {
@@ -743,6 +761,8 @@ async function main() {
         rooms: { select: { room_id: true, price_per_night: true } }
       }
     });
+
+    createdHotels.push(createdHotel);
 
     // Lưu rooms của hotel này
     createdRooms.push(...createdHotel.rooms.map(r => ({
@@ -838,6 +858,69 @@ async function main() {
 
   console.log(`✅ Đã tạo ${bookingCount}/120 booking và payment mẫu.`);
 
+  // 11. Tạo mẫu Vouchers cho Admin và Khách sạn
+  console.log("⏳ Đang tạo dữ liệu Vouchers mẫu...");
+  await prisma.vouchers.deleteMany();
+  const sampleVouchers = [
+    {
+      code: "GLOBAL20",
+      discount_type: "PERCENT",
+      discount_value: 20,
+      min_order_value: 1000000,
+      max_discount: 500000,
+      start_date: new Date(),
+      end_date: new Date(Date.now() + 60 * 24 * 3600 * 1000),
+      usage_limit: 500,
+      used_count: 12,
+      hotel_id: null,
+      status: 1
+    },
+    {
+      code: "WELCOME500K",
+      discount_type: "FIXED",
+      discount_value: 500000,
+      min_order_value: 3000000,
+      max_discount: 500000,
+      start_date: new Date(),
+      end_date: new Date(Date.now() + 90 * 24 * 3600 * 1000),
+      usage_limit: 200,
+      used_count: 5,
+      hotel_id: null,
+      status: 1
+    },
+    {
+      code: "MELIA15",
+      discount_type: "PERCENT",
+      discount_value: 15,
+      min_order_value: 2000000,
+      max_discount: 1000000,
+      start_date: new Date(),
+      end_date: new Date(Date.now() + 30 * 24 * 3600 * 1000),
+      usage_limit: 100,
+      used_count: 3,
+      hotel_id: createdHotels[0]?.hotel_id || null,
+      status: 1
+    },
+    {
+      code: "METROPOLE10",
+      discount_type: "PERCENT",
+      discount_value: 10,
+      min_order_value: 5000000,
+      max_discount: 2000000,
+      start_date: new Date(),
+      end_date: new Date(Date.now() + 45 * 24 * 3600 * 1000),
+      usage_limit: 50,
+      used_count: 1,
+      hotel_id: createdHotels[1]?.hotel_id || null,
+      status: 1
+    }
+  ];
+
+  for (const v of sampleVouchers) {
+    await prisma.vouchers.create({ data: v });
+  }
+  console.log(`✅ Đã tạo ${sampleVouchers.length} Vouchers mẫu thành công!`);
+
   // Tổng kết
   console.log("\n==================================================");
   console.log(`🎉 HOÀN TẤT SEEDING! Tổng kết:`);
@@ -846,6 +929,7 @@ async function main() {
   console.log(`   👥 ${customers.length} khách hàng mẫu`);
   console.log(`   📝 ~${hotelCount * 6} đánh giá phong phú`);
   console.log(`   📅 ${bookingCount} đặt phòng & thanh toán`);
+  console.log(`   🎟️  ${sampleVouchers.length} mã ưu đãi / voucher`);
   console.log(`   💎 ${createdAmenities.length} loại tiện nghi`);
   console.log("==================================================");
 }

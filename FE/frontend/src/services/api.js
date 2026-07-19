@@ -43,9 +43,11 @@ const normalizePaginatedResponse = (resData, fallbackArray = []) => {
     return fallbackArray;
 };
 
-export const getUsersAPI = async (page = 1, limit = 10) => {
+export const getUsersAPI = async (page = 1, limit = 10, keyword = "") => {
     try {
-        const response = await api.get(`/api/admin/users?page=${page}&limit=${limit}`);
+        let url = `/api/admin/users?page=${page}&limit=${limit}`;
+        if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
+        const response = await api.get(url);
         return normalizePaginatedResponse(response.data);
     } catch (error) {
         console.warn("Lỗi khi lấy danh sách người dùng (sử dụng dữ liệu mẫu):", error?.message || error);
@@ -71,9 +73,14 @@ export const createUserAPI = async (userData) => {
 };
 
 // ==================== HOTEL APIs ====================
-export const getHotelsAPI = async (page = 1, limit = 10) => {
+export const getHotelsAPI = async (page = 1, limit = 10, keyword = "", owner_id = null) => {
     try {
-        const response = await api.get(`/api/hotels/getAllHotel?page=${page}&limit=${limit}`);
+        let url = `/api/hotels/getAllHotel?page=${page}&limit=${limit}`;
+        if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
+        if (owner_id !== null && owner_id !== undefined && owner_id !== "null" && owner_id !== "undefined" && owner_id !== "" && !isNaN(Number(owner_id)) && Number(owner_id) > 0) {
+            url += `&owner_id=${Number(owner_id)}`;
+        }
+        const response = await api.get(url);
         return normalizePaginatedResponse(response.data);
     } catch (error) {
         console.warn("Lỗi khi lấy danh sách khách sạn:", error?.message || error);
@@ -215,9 +222,11 @@ export const getUserBookingsAPI = async (userId, page = 1, limit = 10) => {
     }
 };
 
-export const getAllBookingsAPI = async (page = 1, limit = 10) => {
+export const getAllBookingsAPI = async (page = 1, limit = 10, keyword = "") => {
     try {
-        const response = await api.get(`/api/bookings/getAllBooking?page=${page}&limit=${limit}`);
+        let url = `/api/bookings/getAllBooking?page=${page}&limit=${limit}`;
+        if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
+        const response = await api.get(url);
         // Trả về cả { data, pagination } thay vì chỉ mảng
         const resData = response.data;
         return {
@@ -226,6 +235,19 @@ export const getAllBookingsAPI = async (page = 1, limit = 10) => {
         };
     } catch (error) {
         console.warn("Lỗi khi lấy danh sách tất cả đặt phòng:", error?.message || error);
+        return { data: [], pagination: { currentPage: 1, totalPages: 1, totalItems: 0, limit } };
+    }
+};
+
+export const getBookingsByHotelAPI = async (hotelId, page = 1, limit = 10) => {
+    try {
+        const url = hotelId
+            ? `/api/bookings/getAllBooking?hotel_id=${hotelId}&page=${page}&limit=${limit}`
+            : `/api/bookings/getAllBooking?page=${page}&limit=${limit}`;
+        const response = await api.get(url);
+        return normalizePaginatedResponse(response.data);
+    } catch (error) {
+        console.warn(`Lỗi khi lấy bookings cho hotel ${hotelId}:`, error?.message || error);
         return { data: [], pagination: { currentPage: 1, totalPages: 1, totalItems: 0, limit } };
     }
 };
@@ -313,5 +335,60 @@ export const getAdminStatsAPI = async (params = {}) => {
     } catch (error) {
         console.warn("Lỗi lấy thống kê Admin stats API:", error?.message || error);
         return null;
+    }
+};
+
+// ==================== VOUCHER APIs ====================
+export const getVouchersAPI = async (params = {}) => {
+    try {
+        const qs = new URLSearchParams();
+        if (params.hotel_id !== undefined) qs.set('hotel_id', params.hotel_id);
+        if (params.status !== undefined) qs.set('status', params.status);
+        if (params.is_global !== undefined) qs.set('is_global', params.is_global);
+        const response = await api.get(`/api/vouchers?${qs.toString()}`);
+        return response.data?.data || [];
+    } catch (error) {
+        console.warn("Lỗi lấy danh sách Voucher:", error?.message || error);
+        return [];
+    }
+};
+
+export const createVoucherAPI = async (voucherData) => {
+    try {
+        const response = await api.post("/api/vouchers", voucherData);
+        return response.data;
+    } catch (error) {
+        console.error("Lỗi tạo mới voucher:", error);
+        throw error;
+    }
+};
+
+export const updateVoucherAPI = async (id, voucherData) => {
+    try {
+        const response = await api.put(`/api/vouchers/${id}`, voucherData);
+        return response.data;
+    } catch (error) {
+        console.error(`Lỗi cập nhật voucher ${id}:`, error);
+        throw error;
+    }
+};
+
+export const deleteVoucherAPI = async (id) => {
+    try {
+        const response = await api.delete(`/api/vouchers/${id}`);
+        return response.data;
+    } catch (error) {
+        console.error(`Lỗi xóa voucher ${id}:`, error);
+        throw error;
+    }
+};
+
+export const applyVoucherAPI = async (payload) => {
+    try {
+        const response = await api.post("/api/vouchers/apply", payload);
+        return response.data;
+    } catch (error) {
+        console.error("Lỗi áp dụng voucher:", error);
+        throw error;
     }
 };

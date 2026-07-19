@@ -173,6 +173,27 @@ const getAllBooking = async (req, res) => {
         }
       };
     }
+    const hotelIdParam = req.query.hotel_id || req.query.hotelId;
+    if (hotelIdParam && Number(hotelIdParam) > 0) {
+      if (whereCondition.rooms) {
+        whereCondition.rooms.hotel_id = Number(hotelIdParam);
+      } else {
+        whereCondition.rooms = { hotel_id: Number(hotelIdParam) };
+      }
+    }
+
+    const keyword = (req.query.keyword || req.query.search || "").trim();
+    if (keyword) {
+      const isNum = !isNaN(Number(keyword)) && Number(keyword) > 0;
+      whereCondition.OR = [
+        ...(isNum ? [{ booking_id: Number(keyword) }] : []),
+        { users: { full_name: { contains: keyword } } },
+        { users: { email: { contains: keyword } } },
+        { users: { phone: { contains: keyword } } },
+        { rooms: { hotels: { hotel_name: { contains: keyword } } } },
+        { rooms: { room_number: { contains: keyword } } }
+      ];
+    }
 
     const totalItems = await prisma.bookings.count({ where: whereCondition });
 

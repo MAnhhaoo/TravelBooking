@@ -7,10 +7,26 @@ const getAllHotel = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
+    const keyword = req.query.keyword || req.query.search || "";
+    const ownerId = req.query.owner_id || req.query.ownerId;
+    const parsedOwnerId = Number(ownerId);
+    const isValidOwnerId = ownerId && ownerId !== "null" && ownerId !== "undefined" && !isNaN(parsedOwnerId) && parsedOwnerId > 0;
 
-    const totalItems = await prisma.hotels.count();
+    const where = {
+      ...(isValidOwnerId ? { owner_id: parsedOwnerId } : {}),
+      ...(keyword ? {
+        OR: [
+          { hotel_name: { contains: keyword } },
+          { city: { contains: keyword } },
+          { address: { contains: keyword } }
+        ]
+      } : {})
+    };
+
+    const totalItems = await prisma.hotels.count({ where });
 
     const AllHotel = await prisma.hotels.findMany({
+      where,
       skip,
       take: limit,
       select: {
@@ -81,6 +97,27 @@ const getHotelById = async (req, res) => {
           select: {
             image_id: true,
             image_url: true
+          }
+        },
+        rooms: {
+          select: {
+            room_id: true,
+            room_number: true,
+            price_per_night: true,
+            status: true,
+            room_types: {
+              select: {
+                type_name: true,
+                description: true,
+                max_guest: true
+              }
+            },
+            room_images: {
+              select: {
+                image_id: true,
+                image_url: true
+              }
+            }
           }
         }
       }

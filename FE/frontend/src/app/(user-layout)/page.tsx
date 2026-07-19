@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { getHotelsAPI } from "../../services/api";
 import { setHotels, setLoading } from "../../redux/slices/hotelSlice";
@@ -91,10 +92,28 @@ const popularDestinations = [
   { id: 4, name: "Phú Quốc", count: "532 khách sạn", image: "https://images.unsplash.com/photo-1540206351-d6465b3ac5c1?w=500&auto=format&fit=crop&q=60" },
 ];
 
+const RECOMMENDED_CITIES = [
+  "Hà Nội", "Đà Nẵng", "Nha Trang", "Phú Quốc", 
+  "Hội An", "Sa Pa", "TP. Hồ Chí Minh", "Vũng Tàu", "Đà Lạt"
+];
+
 export default function HomePage() {
+  const router = useRouter();
   const dispatch = useDispatch();
   const hotelList = useSelector((state: any) => state.hotels?.list || []);
   const loading = useSelector((state: any) => state.hotels?.loading ?? true);
+
+  const [destination, setDestination] = useState("Hà Nội");
+  const [showDestDropdown, setShowDestDropdown] = useState(false);
+
+  const todayStr = new Date().toISOString().split("T")[0];
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().split("T")[0];
+
+  const [checkInDate, setCheckInDate] = useState(todayStr);
+  const [checkOutDate, setCheckOutDate] = useState(tomorrowStr);
+  const [guestInfo, setGuestInfo] = useState("2 khách, 1 phòng");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -143,47 +162,104 @@ export default function HomePage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.4 }}
-            className="bg-[#0f1631]/90 backdrop-blur-md rounded-3xl p-6 shadow-[0_8px_40px_rgba(0,0,0,0.3)] text-white flex flex-col md:flex-row items-center gap-4 border border-slate-700/40"
+            className="bg-[#0f1631]/95 backdrop-blur-md rounded-3xl p-6 shadow-[0_8px_40px_rgba(0,0,0,0.3)] text-white flex flex-col md:flex-row items-center gap-4 border border-slate-700/40 relative"
           >
-            <div className="flex-1 w-full md:border-r border-slate-700/50 pr-3">
+            {/* Điểm đến với Dropdown gợi ý */}
+            <div className="flex-1 w-full md:border-r border-slate-700/50 pr-3 relative">
               <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 tracking-widest">Điểm đến</label>
               <input
                 type="text"
                 placeholder="Bạn muốn đến đâu?"
-                className="w-full bg-transparent text-sm outline-none font-medium text-white placeholder-slate-500 transition-colors duration-300 focus:placeholder-slate-400"
+                value={destination}
+                onChange={(e) => {
+                  setDestination(e.target.value);
+                  setShowDestDropdown(true);
+                }}
+                onFocus={() => setShowDestDropdown(true)}
+                className="w-full bg-transparent text-sm outline-none font-medium text-white placeholder-slate-500 transition-colors duration-300 focus:placeholder-slate-400 cursor-pointer"
               />
+              {showDestDropdown && (
+                <>
+                  <div className="fixed inset-0 z-20" onClick={() => setShowDestDropdown(false)} />
+                  <div className="absolute left-0 top-full mt-3 w-72 bg-[#111e38] border border-blue-900/60 rounded-2xl shadow-2xl p-3 z-30 max-h-64 overflow-y-auto text-left">
+                    <p className="text-[10px] font-bold text-yellow-400 uppercase tracking-wider px-2 py-1 mb-1 border-b border-blue-900/40">
+                      🌟 Gợi ý điểm đến phổ biến
+                    </p>
+                    <div className="space-y-1">
+                      {RECOMMENDED_CITIES
+                        .filter(c => !destination || c.toLowerCase().includes(destination.toLowerCase()))
+                        .map(city => (
+                          <div
+                            key={city}
+                            onClick={() => {
+                              setDestination(city);
+                              setShowDestDropdown(false);
+                            }}
+                            className="px-3 py-2 rounded-xl text-xs font-medium text-slate-200 hover:bg-[#e5c158] hover:text-black transition cursor-pointer flex items-center justify-between"
+                          >
+                            <span>📍 {city}</span>
+                            <span className="text-[10px] opacity-70">Chọn →</span>
+                          </div>
+                        ))}
+                      {RECOMMENDED_CITIES.filter(c => !destination || c.toLowerCase().includes(destination.toLowerCase())).length === 0 && (
+                        <div className="p-3 text-xs text-slate-400 text-center">
+                          Tìm kiếm theo: "{destination}"
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
+
+            {/* Nhận phòng (Date picker) */}
             <div className="w-full md:w-44 md:border-r border-slate-700/50 pr-3">
               <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 tracking-widest">Nhận phòng</label>
               <input
-                type="text"
-                placeholder="ngày / tháng / năm"
-                className="w-full bg-transparent text-sm outline-none font-medium text-white placeholder-slate-500"
+                type="date"
+                value={checkInDate}
+                onChange={(e) => setCheckInDate(e.target.value)}
+                className="w-full bg-transparent text-sm outline-none font-medium text-white cursor-pointer [color-scheme:dark]"
               />
             </div>
+
+            {/* Trả phòng (Date picker) */}
             <div className="w-full md:w-44 md:border-r border-slate-700/50 pr-3">
               <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 tracking-widest">Trả phòng</label>
               <input
-                type="text"
-                placeholder="ngày / tháng / năm"
-                className="w-full bg-transparent text-sm outline-none font-medium text-white placeholder-slate-500"
+                type="date"
+                value={checkOutDate}
+                min={checkInDate}
+                onChange={(e) => setCheckOutDate(e.target.value)}
+                className="w-full bg-transparent text-sm outline-none font-medium text-white cursor-pointer [color-scheme:dark]"
               />
             </div>
+
+            {/* Khách & Phòng */}
             <div className="w-full md:w-56 md:border-r border-slate-700/50 pr-3">
               <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 tracking-widest">Khách &amp; Phòng</label>
-              <select className="w-full text-sm outline-none font-medium text-white bg-transparent cursor-pointer [color-scheme:dark]">
+              <select
+                value={guestInfo}
+                onChange={(e) => setGuestInfo(e.target.value)}
+                className="w-full text-sm outline-none font-medium text-white bg-transparent cursor-pointer [color-scheme:dark]"
+              >
                 <option className="bg-[#0f1631]">2 khách, 1 phòng</option>
                 <option className="bg-[#0f1631]">1 khách, 1 phòng</option>
                 <option className="bg-[#0f1631]">4 khách, 2 phòng</option>
               </select>
             </div>
+
+            {/* Nút Tìm Kiếm */}
             <motion.button
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
+              onClick={() => {
+                router.push(`/hotels?city=${encodeURIComponent(destination)}&checkin=${checkInDate}&checkout=${checkOutDate}`);
+              }}
               className="w-full md:w-auto bg-gradient-to-r from-[#e5c158] to-[#d4af37] text-black font-bold px-8 py-4 rounded-2xl 
                          transition-all duration-300 
                          shadow-[0_4px_20px_rgba(229,193,88,0.2)]
-                         hover:shadow-[0_8px_32px_rgba(229,193,88,0.35)] whitespace-nowrap"
+                         hover:shadow-[0_8px_32px_rgba(229,193,88,0.35)] whitespace-nowrap cursor-pointer"
             >
               Tìm kiếm
             </motion.button>

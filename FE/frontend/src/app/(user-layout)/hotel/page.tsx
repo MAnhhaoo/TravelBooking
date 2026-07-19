@@ -1,7 +1,7 @@
-﻿// src/app/(user-layout)/hotel/page.tsx
+// src/app/(user-layout)/hotel/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { getHotelsAPI } from "../../../services/api";
@@ -61,6 +61,17 @@ const headerVariants = {
 };
 
 // ==================== HELPER ====================
+function normalizeVietnamese(str: string): string {
+  if (!str) return "";
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase()
+    .trim();
+}
+
 function calcAvgRating(reviews: any[]) {
   if (!reviews || reviews.length === 0) return null;
   const valid = reviews.filter((r: any) => r.rating !== null && r.rating !== undefined);
@@ -97,7 +108,7 @@ const AMENITY_LIST = ["WiFi mien phi", "Bua sang", "Do xe", "Ho boi", "Spa", "Ph
 const DEFAULT_TAGS = ["WiFi", "Bua sang", "Do xe", "Ho boi", "Spa"];
 
 // ==================== MAIN COMPONENT ====================
-export default function HotelPage() {
+function HotelContent() {
   const dispatch = useDispatch();
   const hotelList = useSelector((state: any) => state.hotels?.list || []);
   const loading = useSelector((state: any) => state.hotels?.loading ?? true);
@@ -111,7 +122,9 @@ export default function HotelPage() {
 
   useEffect(() => {
     const cityParam = searchParams ? searchParams.get("city") : null;
+    const searchParam = searchParams ? searchParams.get("search") : null;
     if (cityParam) setSelectedCity(cityParam);
+    if (searchParam) setSearchTerm(searchParam);
   }, [searchParams]);
 
   useEffect(() => {
@@ -138,11 +151,17 @@ export default function HotelPage() {
 
   const filteredHotels = hotelList
     .filter((hotel: any) => {
+      const normSearch = normalizeVietnamese(searchTerm);
       const matchSearch =
-        hotel.hotel_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        hotel.address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        hotel.city?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchCity = selectedCity === "Tat ca" || hotel.city === selectedCity;
+        !normSearch ||
+        normalizeVietnamese(hotel.hotel_name || "").includes(normSearch) ||
+        normalizeVietnamese(hotel.address || "").includes(normSearch) ||
+        normalizeVietnamese(hotel.city || "").includes(normSearch);
+      const matchCity =
+        selectedCity === "Tat ca" ||
+        !selectedCity ||
+        normalizeVietnamese(hotel.city || "") === normalizeVietnamese(selectedCity) ||
+        normalizeVietnamese(hotel.city || "").includes(normalizeVietnamese(selectedCity));
       const matchStar = selectedStars.length === 0 || selectedStars.includes(Number(hotel.star_rating));
       const minPrice = getMinPrice(hotel);
       const matchPrice = minPrice === 0 || minPrice <= maxPrice;
@@ -212,11 +231,14 @@ export default function HotelPage() {
           <div className="space-y-3">
             <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Thanh pho</label>
             <div className="flex flex-wrap gap-2">
-              {displayCities.map((city: string, idx: number) => (
-                <motion.span key={idx} onClick={() => setSelectedCity(city)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                  className={`text-xs px-3.5 py-2 rounded-xl cursor-pointer transition-all ${city === selectedCity ? "bg-[#e5c158] text-black font-bold" : "bg-[#161f44] text-slate-300 hover:bg-[#1f2b5c] hover:text-white"}`}
-                >{city}</motion.span>
-              ))}
+              {displayCities.map((city: string, idx: number) => {
+                const isSelected = city === selectedCity || (selectedCity !== "Tat ca" && city !== "Tat ca" && normalizeVietnamese(city) === normalizeVietnamese(selectedCity));
+                return (
+                  <motion.span key={idx} onClick={() => setSelectedCity(city)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                    className={`text-xs px-3.5 py-2 rounded-xl cursor-pointer transition-all ${isSelected ? "bg-[#e5c158] text-black font-bold" : "bg-[#161f44] text-slate-300 hover:bg-[#1f2b5c] hover:text-white"}`}
+                  >{city}</motion.span>
+                );
+              })}
             </div>
           </div>
 
@@ -380,5 +402,13 @@ export default function HotelPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function HotelPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#070c1e] text-white flex items-center justify-center">Đang tải danh sách khách sạn...</div>}>
+      <HotelContent />
+    </Suspense>
   );
 }

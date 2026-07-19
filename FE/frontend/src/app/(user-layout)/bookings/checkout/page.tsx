@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useSelector } from "react-redux";
-import { createBookingAPI, createPaymentAPI } from "../../../../services/api";
+import { createBookingAPI, createPaymentAPI, applyVoucherAPI } from "../../../../services/api";
 
-export default function CheckoutPage() {
+function CheckoutContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const authUser = useSelector((state: any) => state.auth?.user);
@@ -15,7 +15,7 @@ export default function CheckoutPage() {
   const hotelName = searchParams?.get("hotelName") || "Sofitel Legend Metropole Hà Nội";
   const roomNumber = searchParams?.get("roomNumber") || "Deluxe Suite";
   const pricePerNight = Number(searchParams?.get("price") || 2500000);
-  const offerCode = searchParams?.get("offerCode") || "";
+  const initialOfferCode = searchParams?.get("offerCode") || "";
 
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
@@ -26,19 +26,37 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState("qr");
   const [loading, setLoading] = useState(false);
 
+  const [guestDetails, setGuestDetails] = useState("2 người lớn");
+
+  // Voucher states
+  const [inputVoucherCode, setInputVoucherCode] = useState(initialOfferCode);
+  const [appliedVoucher, setAppliedVoucher] = useState<any>(null);
+  const [voucherError, setVoucherError] = useState("");
+  const [voucherLoading, setVoucherLoading] = useState(false);
+
   useEffect(() => {
     if (authUser) {
       setGuestName(authUser.full_name || authUser.fullName || "");
       setGuestEmail(authUser.email || "");
       setGuestPhone(authUser.phone || "");
     }
-    // Default dates: tomorrow and day after tomorrow
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const nextDay = new Date(tomorrow);
-    nextDay.setDate(tomorrow.getDate() + 2);
-    setCheckIn(tomorrow.toISOString().split("T")[0]);
-    setCheckOut(nextDay.toISOString().split("T")[0]);
+
+    const draftStr = sessionStorage.getItem("booking_draft");
+    if (draftStr) {
+      try {
+        const draft = JSON.parse(draftStr);
+        if (draft.check_in) setCheckIn(draft.check_in);
+        if (draft.check_out) setCheckOut(draft.check_out);
+        if (draft.guest_details) setGuestDetails(draft.guest_details);
+      } catch (e) {}
+    } else {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const nextDay = new Date(tomorrow);
+      nextDay.setDate(tomorrow.getDate() + 2);
+      setCheckIn(tomorrow.toISOString().split("T")[0]);
+      setCheckOut(nextDay.toISOString().split("T")[0]);
+    }
   }, [authUser]);
 
   const nights = checkIn && checkOut 
@@ -46,8 +64,52 @@ export default function CheckoutPage() {
     : 1;
 
   const subTotal = pricePerNight * nights;
-  const discount = offerCode ? subTotal * 0.2 : 0;
-  const totalPrice = subTotal - discount;
+
+  // Tự động kiểm tra voucher ban đầu nếu có từ URL
+  useEffect(() => {
+    if (initialOfferCode && subTotal > 0 && !appliedVoucher) {
+      handleApplyVoucher(initialOfferCode);
+    }
+  }, [subTotal, initialOfferCode]);
+
+  const handleApplyVoucher = async (codeToApply?: string) => {
+    const code = (codeToApply || inputVoucherCode).trim();
+    if (!code) {
+      setVoucherError("Vui lòng nhập mã ưu đãi/voucher");
+      return;
+    }
+    setVoucherLoading(true);
+    setVoucherError("");
+    try {
+      const res = await applyVoucherAPI({
+        code,
+        hotel_id: Number(hotelId),
+        order_value: subTotal
+      });
+      if (res && res.success && res.data) {
+        setAppliedVoucher(res.data);
+        setInputVoucherCode(res.data.code);
+        setVoucherError("");
+      } else {
+        setAppliedVoucher(null);
+        setVoucherError(res?.message || "Mã giảm giá không hợp lệ");
+      }
+    } catch (err: any) {
+      setAppliedVoucher(null);
+      setVoucherError(err?.response?.data?.message || "Mã giảm giá không hợp lệ hoặc chưa đạt điều kiện");
+    } finally {
+      setVoucherLoading(false);
+    }
+  };
+
+  const handleRemoveVoucher = () => {
+    setAppliedVoucher(null);
+    setInputVoucherCode("");
+    setVoucherError("");
+  };
+
+  const discount = appliedVoucher ? Number(appliedVoucher.discount_amount || 0) : 0;
+  const totalPrice = Math.max(0, subTotal - discount);
 
   const handleConfirmBooking = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,7 +144,7 @@ export default function CheckoutPage() {
       router.push("/bookings/history");
     } catch (err: any) {
       console.error("Lỗi đặt phòng:", err);
-      alert("🎉 (Giả lập) Đặt phòng thành công với mã ưu đãi " + (offerCode || "TRAVEL2026"));
+      alert("🎉 (Giả lập) Đặt phòng thành công với mã ưu đãi " + (appliedVoucher?.code || initialOfferCode || "TRAVEL2026"));
       router.push("/bookings/history");
     } finally {
       setLoading(false);
@@ -239,6 +301,11 @@ export default function CheckoutPage() {
                   <p className="text-sm font-semibold text-slate-200 mt-0.5">Phòng {decodeURIComponent(roomNumber)}</p>
                 </div>
 
+                <div>
+                  <p className="text-xs text-slate-400 uppercase">Số lượng khách</p>
+                  <p className="text-sm font-semibold text-[#e5c158] mt-0.5">👥 {guestDetails}</p>
+                </div>
+
                 <div className="grid grid-cols-2 gap-2 bg-[#070c1e] p-3.5 rounded-2xl border border-slate-800/80 text-xs">
                   <div>
                     <span className="text-slate-500 block">Check-in</span>
@@ -250,12 +317,59 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                {offerCode && (
-                  <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-xl flex items-center justify-between text-xs text-emerald-400">
-                    <span>🏷️ Mã ưu đãi: <strong>{offerCode}</strong></span>
-                    <span>-20%</span>
-                  </div>
-                )}
+                {/* VOUCHER / ƯU ĐÃI SECTION */}
+                <div className="bg-[#070c1e] p-4 rounded-2xl border border-slate-800/80 space-y-3">
+                  <label className="block text-xs font-bold text-[#e5c158] uppercase flex items-center justify-between">
+                    <span>🎟️ Mã ưu đãi / Voucher</span>
+                    {appliedVoucher && (
+                      <span className="text-[11px] text-emerald-400 font-normal">● Đã áp dụng mã</span>
+                    )}
+                  </label>
+
+                  {appliedVoucher ? (
+                    <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-xl flex items-center justify-between text-xs text-emerald-400">
+                      <div>
+                        <div className="font-bold font-mono text-sm text-yellow-400">{appliedVoucher.code}</div>
+                        <div className="text-[11px] text-emerald-300 mt-0.5">
+                          Giảm {appliedVoucher.discount_type === "PERCENT" ? `${appliedVoucher.discount_value}%` : formatVND(Number(appliedVoucher.discount_value))}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRemoveVoucher}
+                        className="px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg text-xs font-bold transition"
+                      >
+                        ✕ Gỡ mã
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Nhập mã giảm giá..."
+                          value={inputVoucherCode}
+                          onChange={(e) => {
+                            setInputVoucherCode(e.target.value.toUpperCase());
+                            setVoucherError("");
+                          }}
+                          className="flex-1 bg-[#0f1736] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono font-bold text-yellow-400 placeholder:text-slate-500 focus:outline-none focus:border-[#e5c158]"
+                        />
+                        <button
+                          type="button"
+                          disabled={voucherLoading || !inputVoucherCode.trim()}
+                          onClick={() => handleApplyVoucher()}
+                          className="px-4 py-2 bg-[#e5c158] hover:bg-yellow-400 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-xs transition shadow-md"
+                        >
+                          {voucherLoading ? "..." : "Áp dụng"}
+                        </button>
+                      </div>
+                      {voucherError && (
+                        <p className="text-[11px] text-rose-400 mt-1.5 font-medium">⚠️ {voucherError}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 <div className="border-t border-slate-800 pt-4 space-y-2.5 text-sm">
                   <div className="flex justify-between text-slate-400">
@@ -288,5 +402,13 @@ export default function CheckoutPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#070c1e] text-white flex items-center justify-center">Đang tải thông tin đặt phòng...</div>}>
+      <CheckoutContent />
+    </Suspense>
   );
 }

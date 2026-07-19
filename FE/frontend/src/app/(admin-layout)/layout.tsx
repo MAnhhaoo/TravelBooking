@@ -317,16 +317,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   </div>
                 </button>
 
-                {/* Thống kê */}
+                {/* Quản lý Voucher */}
                 <button
-                  onClick={() => selectTab("overview")}
-                  className="w-full px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between transition-all duration-200 text-slate-300 hover:bg-white/5 hover:text-white"
+                  onClick={() => selectTab("vouchers")}
+                  className={`w-full px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-between transition-all duration-200 ${
+                    activeTab === "vouchers"
+                      ? "bg-[#18284c] text-[#facc15] border border-yellow-500/30 shadow-lg shadow-blue-950/50"
+                      : "text-slate-300 hover:bg-white/5 hover:text-white"
+                  }`}
                 >
                   <div className="flex items-center gap-3">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                    <span>Thống kê</span>
+                    <span className="text-lg">🎟️</span>
+                    <span>Quản lý Voucher</span>
                   </div>
                 </button>
 
@@ -366,15 +368,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {/* TOP BAR (ONLY FOR MAIN DASHBOARD) */}
           {!isSettings ? (
             <header className="h-20 border-b border-blue-900/30 bg-[#0a1128]/80 backdrop-blur-md px-8 flex items-center justify-between sticky top-0 z-10 shrink-0">
-              <div className="relative w-96">
-                <input
-                  type="text"
-                  placeholder="Tìm kiếm đặt phòng, khách sạn..."
-                  className="w-full bg-[#111e38] border border-blue-900/50 rounded-xl px-4 py-2.5 pl-10 text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/30 transition-all"
-                />
-                <svg className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+              <div className="text-white font-bold text-lg font-serif tracking-wide flex items-center gap-2">
+                <span className="text-yellow-400">🛡️</span> Hệ Thống Quản Trị Viên (Admin Portal)
               </div>
 
               <div className="flex items-center gap-6">

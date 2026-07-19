@@ -1,18 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
 import { useRouter } from "next/navigation";
+import { loginSuccess } from "../../../redux/slices/authSlice";
 import {
   getHotelsAPI,
   getRoomsByHotelAPI,
   getAllBookingsAPI,
+  getBookingsByHotelAPI,
   getOwnerStatsAPI,
   getReviewsByHotelAPI,
   updateStatusBookingAPI
 } from "../../../services/api";
 import { formatCurrencyVND } from "../../../utils/dataMappers";
 import { motion, AnimatePresence } from "framer-motion";
+import OwnerVouchersManager from "../../../components/OwnerVouchersManager";
 
 // ── Pagination Component (reusable) ──
 function Pagination({ currentPage, totalPages, onPageChange }: { currentPage: number; totalPages: number; onPageChange: (p: number) => void }) {
@@ -38,6 +41,7 @@ function Pagination({ currentPage, totalPages, onPageChange }: { currentPage: nu
 }
 
 export default function OwnerDashboardPage() {
+  const dispatch = useDispatch();
   const authUser = useSelector((state: any) => state.auth?.user);
   const router = useRouter();
 
@@ -72,39 +76,81 @@ export default function OwnerDashboardPage() {
   const [statsStartDate, setStatsStartDate] = useState("");
   const [statsEndDate, setStatsEndDate] = useState("");
 
-  // ── Fetch khách sạn của owner & stats ban đầu
+  // Flexible Check-in / Check-out time settings
+  const [customCheckIn, setCustomCheckIn] = useState("14:00");
+  const [customCheckOut, setCustomCheckOut] = useState("12:00");
+  const [flexibleSupport, setFlexibleSupport] = useState(true);
+
+  // ── Restore authUser on reload & Fetch khách sạn của owner từ API theo ownerId
   useEffect(() => {
-    const ownerId = authUser?.user_id || authUser?.id;
+    let currentUser = authUser;
+    if (!currentUser && typeof window !== "undefined") {
+      const storedUser = localStorage.getItem("user") || sessionStorage.getItem("user");
+      const storedToken = localStorage.getItem("token") || sessionStorage.getItem("token");
+      if (storedUser && storedToken) {
+        try {
+          currentUser = JSON.parse(storedUser);
+          dispatch(loginSuccess({ user: currentUser, token: storedToken }));
+        } catch (e) {
+          console.error("Lỗi parse user storage:", e);
+        }
+      }
+    }
+    const ownerId = currentUser?.user_id || currentUser?.id;
     if (!ownerId) return;
+
     const fetchBase = async () => {
       setLoading(true);
       try {
         const [hotelsRes, statsRes]: any[] = await Promise.all([
-          getHotelsAPI(1, 100),
-          getOwnerStatsAPI({ period: statsPeriod })
+          getHotelsAPI(1, 100, "", ownerId),
+          getOwnerStatsAPI({ period: statsPeriod, ownerId })
         ]);
-        const allHotels = Array.isArray(hotelsRes) ? hotelsRes : [];
-        let filteredHotels = allHotels.filter((h: any) => h.owner_id === ownerId);
-        if (filteredHotels.length === 0) {
-          filteredHotels = [{ hotel_id: 0, hotel_name: "Chưa có khách sạn", city: "—", star_rating: 0, status: 0, description: "", hotel_images: [] }];
-        }
-        setMyHotels(filteredHotels);
-        if (!selectedHotelId && filteredHotels[0]?.hotel_id) {
-          setSelectedHotelId(filteredHotels[0].hotel_id);
+        const ownerHotels: any[] = Array.isArray(hotelsRes) ? hotelsRes : (hotelsRes?.data || []);
+        setMyHotels(ownerHotels);
+        if (ownerHotels.length > 0 && !selectedHotelId) {
+          setSelectedHotelId(ownerHotels[0].hotel_id);
         }
         setStats(statsRes || null);
-      } catch (error) {
-        console.error("Lỗi fetch khách sạn owner:", error);
-      } finally {
-        setLoading(false);
-      }
+      } catch (err) { console.error("Lỗi fetch base Owner:", err); }
+      finally { setLoading(false); }
     };
     fetchBase();
   }, [authUser]);
 
-  // ── Fetch phòng theo hotelId với phân trang
+  // Load check-in / check-out settings
   useEffect(() => {
-    const activeHotelId = selectedHotelId || myHotels[0]?.hotel_id;
+    const hid = selectedHotelId || (myHotels[0]?.hotel_id);
+    if (!hid) return;
+    const saved = localStorage.getItem(`hotel_time_settings_${hid}`);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.checkIn) setCustomCheckIn(parsed.checkIn);
+        if (parsed.checkOut) setCustomCheckOut(parsed.checkOut);
+        if (parsed.flexible !== undefined) setFlexibleSupport(parsed.flexible);
+      } catch (e) {}
+    } else {
+      setCustomCheckIn("14:00");
+      setCustomCheckOut("12:00");
+      setFlexibleSupport(true);
+    }
+  }, [selectedHotelId, myHotels]);
+
+  const handleSaveTimeSettings = () => {
+    const hid = selectedHotelId || (myHotels[0]?.hotel_id);
+    if (!hid) return;
+    localStorage.setItem(`hotel_time_settings_${hid}`, JSON.stringify({
+      checkIn: customCheckIn,
+      checkOut: customCheckOut,
+      flexible: flexibleSupport
+    }));
+    alert(`✅ Đã cập nhật giờ Check-in (${customCheckIn}) và Check-out (${customCheckOut}) thành công!`);
+  };
+
+  // ── Fetch rooms của khách sạn theo pagination
+  useEffect(() => {
+    const activeHotelId = selectedHotelId || (myHotels[0]?.hotel_id);
     if (!activeHotelId || activeHotelId === 0) return;
     const fetchRooms = async () => {
       try {
@@ -112,26 +158,29 @@ export default function OwnerDashboardPage() {
         const arr = Array.isArray(res) ? res : (res?.data || []);
         setMyRooms(arr);
         if (res?.pagination) setRoomPagination(res.pagination);
-      } catch (err) { console.error("Lỗi fetch phòng:", err); }
+      } catch (err) { console.error("Lỗi fetch rooms:", err); }
     };
     fetchRooms();
   }, [myHotels, selectedHotelId, roomPage]);
 
-  // ── Fetch bookings với phân trang
+  // ── Fetch bookings của khách sạn theo pagination
   useEffect(() => {
+    const activeHotelId = selectedHotelId || (myHotels[0]?.hotel_id);
+    if (!activeHotelId || activeHotelId === 0) return;
     const fetchBookings = async () => {
       try {
-        const res: any = await getAllBookingsAPI(bookingPage, 10);
-        setMyBookings(res?.data || []);
+        const res: any = await getBookingsByHotelAPI(activeHotelId, bookingPage, 10);
+        const arr = Array.isArray(res) ? res : (res?.data || []);
+        setMyBookings(arr);
         if (res?.pagination) setBookingPagination(res.pagination);
       } catch (err) { console.error("Lỗi fetch bookings:", err); }
     };
     fetchBookings();
-  }, [bookingPage]);
+  }, [myHotels, selectedHotelId, bookingPage]);
 
-  // ── Fetch reviews của khách sạn với phân trang
+  // ── Fetch reviews của khách sạn theo pagination
   useEffect(() => {
-    const activeHotelId = selectedHotelId || myHotels[0]?.hotel_id;
+    const activeHotelId = selectedHotelId || (myHotels[0]?.hotel_id);
     if (!activeHotelId || activeHotelId === 0) return;
     const fetchReviews = async () => {
       try {
@@ -154,6 +203,12 @@ export default function OwnerDashboardPage() {
       setStats(res);
     } catch (err) { console.error("Lỗi fetch stats:", err); }
   };
+
+  useEffect(() => {
+    if (statsPeriod !== "custom") {
+      handleFetchStats();
+    }
+  }, [statsPeriod]);
 
   // Cập nhật trạng thái đặt phòng realtime sang BE
   const handleUpdateStatus = async (bookingId: number, newStatus: number) => {
@@ -228,6 +283,7 @@ export default function OwnerDashboardPage() {
             { id: "bookings",  icon: "📋", label: "Đặt phòng" },
             { id: "rooms",     icon: "🛏️", label: "Phòng & Khách sạn" },
             { id: "revenue",   icon: "📊", label: "Doanh thu" },
+            { id: "vouchers",  icon: "🎟️", label: "Ưu đãi & Voucher" },
             { id: "reviews",   icon: "⭐", label: "Đánh giá" },
             { id: "settings",  icon: "⚙️", label: "Cài đặt" },
           ].map(tab => (
@@ -527,7 +583,9 @@ export default function OwnerDashboardPage() {
                     </table>
                   </div>
                   {/* Phân trang booking */}
-                  <Pagination currentPage={bookingPagination?.currentPage || 1} totalPages={bookingPagination?.totalPages || 1} onPageChange={setBookingPage} />
+                  {(bookingPagination?.totalItems || myBookings.length) > 10 && (
+                    <Pagination currentPage={bookingPagination?.currentPage || 1} totalPages={bookingPagination?.totalPages || 1} onPageChange={setBookingPage} />
+                  )}
                 </div>
               </motion.div>
             )}
@@ -624,7 +682,9 @@ export default function OwnerDashboardPage() {
                       </tbody>
                     </table>
                   </div>
-                  <Pagination currentPage={roomPagination?.currentPage || 1} totalPages={roomPagination?.totalPages || 1} onPageChange={setRoomPage} />
+                  {(roomPagination?.totalItems || myRooms.length) > 10 && (
+                    <Pagination currentPage={roomPagination?.currentPage || 1} totalPages={roomPagination?.totalPages || 1} onPageChange={setRoomPage} />
+                  )}
                 </div>
               </motion.div>
             )}
@@ -690,17 +750,16 @@ export default function OwnerDashboardPage() {
                 {stats?.monthlyStats && stats.monthlyStats.length > 0 && (
                   <div className="bg-[#131f37] border border-slate-800/80 rounded-2xl p-6 shadow-xl">
                     <h3 className="text-lg font-bold text-white mb-6">Biểu đồ doanh thu theo tháng (triệu VND)</h3>
-                    <div className="h-52 flex items-end gap-2 px-2">
+                    <div className="h-56 flex items-end gap-3 px-2 pt-6">
                       {stats.monthlyStats.map((m: any, i: number) => {
                         const maxRev = Math.max(...stats.monthlyStats.map((x: any) => x.revenue), 1);
                         const heightPct = Math.round((m.revenue / maxRev) * 100);
                         return (
-                          <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
-                            <div className="w-full relative" style={{ height: `${Math.max(heightPct, 3)}%` }}>
-                              <div className="absolute inset-0 bg-gradient-to-t from-amber-500 to-[#fbbf24] rounded-t-md opacity-80 group-hover:opacity-100 transition" />
-                              <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] text-slate-400 opacity-0 group-hover:opacity-100 whitespace-nowrap">{m.revenue}M</span>
+                          <div key={i} className="flex-1 flex flex-col items-center gap-2 group h-full justify-end">
+                            <div className="w-full relative bg-gradient-to-t from-amber-500 to-[#fbbf24] rounded-t-lg opacity-85 group-hover:opacity-100 transition-all duration-300 shadow-lg group-hover:shadow-amber-500/20" style={{ height: `${Math.max(heightPct, 6)}%` }}>
+                              <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[11px] text-amber-300 opacity-0 group-hover:opacity-100 whitespace-nowrap font-extrabold bg-slate-900/90 px-2 py-0.5 rounded border border-amber-500/30 transition-all">{m.revenue}M</span>
                             </div>
-                            <span className="text-[10px] text-slate-500">{m.month}</span>
+                            <span className="text-[11px] font-semibold text-slate-400 group-hover:text-amber-400 transition">{m.month}</span>
                           </div>
                         );
                       })}
@@ -756,19 +815,83 @@ export default function OwnerDashboardPage() {
                     })}
                   </div>
                 )}
-                <Pagination currentPage={reviewPagination?.currentPage || 1} totalPages={reviewPagination?.totalPages || 1} onPageChange={setReviewPage} />
+                {(reviewPagination?.totalItems || myReviews.length) > 10 && (
+                  <Pagination currentPage={reviewPagination?.currentPage || 1} totalPages={reviewPagination?.totalPages || 1} onPageChange={setReviewPage} />
+                )}
               </motion.div>
             )}
 
-            {/* TAB: CÀI ĐẶT */}
+            {/* TAB: CÀI ĐẶT THỜI GIAN CHECK-IN / CHECK-OUT LINH ĐỘNG */}
             {activeTab === "settings" && (
               <motion.div key="settings" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
-                <h2 className="text-2xl font-bold text-white mb-6">Cài đặt tài khoản</h2>
-                <div className="bg-[#131f37] border border-slate-800/80 rounded-2xl p-6 shadow-xl">
-                  <p className="text-slate-400 text-sm">Tính năng đang được phát triển. Liên hệ Admin để cập nhật thông tin tài khoản.</p>
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-white">Cài đặt Thời gian Check-in & Check-out Linh động</h2>
+                  <p className="text-sm text-slate-400 mt-0.5">Thay vì mặc định 14:00 nhận phòng và 12:00 trả phòng, bạn có thể thiết lập thời gian linh hoạt phù hợp với vận hành khách sạn.</p>
+                </div>
+                <div className="bg-[#131f37] border border-slate-800/80 rounded-3xl p-8 shadow-2xl max-w-3xl space-y-8">
+                  <div className="flex items-center gap-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-300 text-sm">
+                    <span className="text-2xl">⚡</span>
+                    <div>
+                      <strong className="block text-white">Khách sạn đang cấu hình:</strong>
+                      {activeHotel.hotel_name || "TravelBooking Hotel"}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 space-y-3">
+                      <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                        ⏰ Giờ nhận phòng (Check-in)
+                      </label>
+                      <input
+                        type="time"
+                        value={customCheckIn}
+                        onChange={(e) => setCustomCheckIn(e.target.value)}
+                        className="w-full bg-[#0a1225] border border-slate-700 rounded-xl px-4 py-3 text-white font-mono text-lg font-bold outline-none focus:border-[#fbbf24] transition [color-scheme:dark]"
+                      />
+                      <p className="text-[11px] text-slate-400">Khách có thể nhận phòng bắt đầu từ thời điểm này.</p>
+                    </div>
+
+                    <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 space-y-3">
+                      <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                        ⏳ Giờ trả phòng (Check-out)
+                      </label>
+                      <input
+                        type="time"
+                        value={customCheckOut}
+                        onChange={(e) => setCustomCheckOut(e.target.value)}
+                        className="w-full bg-[#0a1225] border border-slate-700 rounded-xl px-4 py-3 text-white font-mono text-lg font-bold outline-none focus:border-[#fbbf24] transition [color-scheme:dark]"
+                      />
+                      <p className="text-[11px] text-slate-400">Thời hạn tối đa khách trả phòng để chuẩn bị đón khách mới.</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900/40 p-5 rounded-2xl border border-slate-800/80 flex items-start gap-4">
+                    <input
+                      type="checkbox"
+                      id="flexibleSupport"
+                      checked={flexibleSupport}
+                      onChange={(e) => setFlexibleSupport(e.target.checked)}
+                      className="mt-1 w-5 h-5 accent-[#fbbf24] rounded cursor-pointer shrink-0"
+                    />
+                    <label htmlFor="flexibleSupport" className="text-sm text-slate-300 cursor-pointer">
+                      <strong className="block text-white mb-0.5">Bật hỗ trợ Check-in sớm / Check-out muộn miễn phí</strong>
+                      Cho phép khách hàng nhận phòng sớm 1-2 tiếng hoặc trả phòng muộn nếu tình trạng phòng thực tế đang trống (không thu thêm phụ phí).
+                    </label>
+                  </div>
+
+                  <div className="pt-2 flex justify-end">
+                    <button
+                      onClick={handleSaveTimeSettings}
+                      className="px-8 py-3.5 bg-gradient-to-r from-[#fbbf24] to-amber-500 hover:brightness-110 text-slate-950 font-extrabold rounded-xl text-sm tracking-wide uppercase transition shadow-lg shadow-amber-500/20 active:scale-95 flex items-center gap-2"
+                    >
+                      💾 Lưu cấu hình thời gian
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             )}
+
+            {activeTab === "vouchers" && <OwnerVouchersManager activeHotel={activeHotel} myHotels={myHotels} />}
           </AnimatePresence>
         </main>
       </div>
